@@ -7,11 +7,11 @@ import logging
 import os # <--- ADD THIS IMPORT
 
 # --- Project-specific imports ---
-import constants
-from logging_setup import setup_logging
-from config_manager import ConfigManager
-from audio_processor import AudioProcessor
-from ui import UI
+from utils import constants
+from utils.logging_setup import setup_logging
+from utils.config_manager import ConfigManager
+from core.audio_processor import AudioProcessor
+from ui.main_window import UI
 
 setup_logging()
 

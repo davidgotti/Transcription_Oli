@@ -1,6 +1,6 @@
 # logging_setup.py
 import logging
-import constants # Assuming constants.py is in the same directory
+from utils import constants # Assuming constants.py is in the same directory
 
 def setup_logging():
     """Configures the root logger for the application."""
