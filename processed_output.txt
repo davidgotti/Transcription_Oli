@@ -1,0 +1,7 @@
+[00:00.000 - 00:01.000] SPEAKER_01: Oui.
+[00:01.000 - 00:03.000] SPEAKER_00: Et puis, il y avait deux petites...
+[00:03.000 - 00:05.000] SPEAKER_00: Tu as peut-être déjà vu deux petits bâtons,
+[00:05.000 - 00:06.000] SPEAKER_00: un stabilisateur.
+[00:06.000 - 00:07.000] SPEAKER_00: Oui.
+[00:07.000 - 00:08.000] SPEAKER_01: Oui.
+[00:08.000 - 00:10.000] SPEAKER_01: J'ai longtemps été moniteur de ski.
