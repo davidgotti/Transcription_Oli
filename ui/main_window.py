@@ -4,12 +4,13 @@ from tkinter import ttk
 import logging
 
 class UI:
-    def __init__(self, root, start_processing_callback, select_audio_file_callback):
+    def __init__(self, root, start_processing_callback, select_audio_file_callback, open_correction_window_callback): # Added open_correction_window_callback
         self.root = root
         self.root.title("Audio Transcription and Diarization")
 
         self.start_processing_callback = start_processing_callback
         self.select_audio_file_callback = select_audio_file_callback
+        self.open_correction_window_callback = open_correction_window_callback # Store callback
 
         # Hugging Face Token Input
         self.token_label = ttk.Label(root, text="Hugging Face Token:")
@@ -50,12 +51,18 @@ class UI:
         self.output_text_area.grid(row=8, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
         self.output_text_area.config(state=tk.DISABLED)
 
+        # Correction Window Button
+        self.correction_button = ttk.Button(root, text="Correct Transcription", command=self.open_correction_window_callback)
+        self.correction_button.grid(row=9, column=0, columnspan=3, padx=5, pady=10)
+
+
         root.grid_columnconfigure(1, weight=1)
-        root.grid_rowconfigure(8, weight=1)
+        root.grid_rowconfigure(8, weight=1) # output_text_area
+        # root.grid_rowconfigure(9, weight=0) # correction_button row
 
         self.elements_to_disable = [
             self.browse_button, self.process_button, self.audio_file_entry,
-            self.token_entry, self.save_token_button
+            self.token_entry, self.save_token_button, self.correction_button # Add correction_button here
         ]
         self.save_token_callback = None
 
@@ -95,36 +102,26 @@ class UI:
         self.output_text_area.config(state=tk.DISABLED)
 
     def display_processed_output(self, output_file_path: str = None, processing_returned_empty: bool = False):
-        """
-        Displays processed output. If processing_returned_empty is True, shows a specific message.
-        Otherwise, tries to read from output_file_path.
-        """
         logging.info(f"UI: Displaying results. Path: '{output_file_path}', Empty: {processing_returned_empty}")
         try:
             if processing_returned_empty:
-                # This specific message comes from the AudioProcessor or MainApp if no speech was detected
-                # or if diarization/transcription results in an empty interpretable output.
                 self.update_output_text("No speech was detected or transcribed from the audio file, or the processing yielded no usable segments.")
                 logging.info("UI: Displayed 'no speech/segments' message.")
                 return
 
             if not output_file_path:
-                # This case might happen if processing was meant to be successful but somehow
-                # the path was not provided to display_processed_output.
-                # The main app should handle this, but as a fallback:
                 msg_to_show = "Error: No output file path provided to display results, though processing was not marked as empty."
                 logging.error(f"UI: {msg_to_show}")
                 self.update_output_text(msg_to_show)
                 return
 
-            # If not empty and path is provided, read the file
             with open(output_file_path, 'r', encoding='utf-8') as f:
                 output_text = f.read()
 
             if output_text.strip():
                 self.update_output_text(output_text)
                 logging.info(f"UI: Results from '{output_file_path}' displayed successfully.")
-            else: # File is empty, but we didn't expect it to be (as processing_returned_empty was False)
+            else: 
                 self.update_output_text(f"Processing complete, but the output file ('{output_file_path}') was unexpectedly empty.")
                 logging.warning(f"UI: Output file '{output_file_path}' was empty, though processing_returned_empty was False.")
 
