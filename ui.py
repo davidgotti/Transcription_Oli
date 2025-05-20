@@ -1,6 +1,7 @@
 # ui.py
 import tkinter as tk
 from tkinter import ttk
+import logging # Added logging
 
 class UI:
     def __init__(self, root, start_processing_callback, select_audio_file_callback):
@@ -81,12 +82,12 @@ class UI:
         self.token_entry.insert(0, token)
 
     def disable_ui(self):
-        print("ui.py: disable_ui: Disabling UI elements.")
+        logging.debug("ui.py: disable_ui: Disabling UI elements.") # Changed print to logging
         for element in self.elements_to_disable:
             element.config(state=tk.DISABLED)
 
     def enable_ui(self):
-        print("ui.py: enable_ui: Enabling UI elements.")
+        logging.debug("ui.py: enable_ui: Enabling UI elements.") # Changed print to logging
         for element in self.elements_to_disable:
             element.config(state=tk.NORMAL)
 
@@ -95,3 +96,36 @@ class UI:
         self.output_text_area.delete("1.0", tk.END)
         self.output_text_area.insert(tk.END, text)
         self.output_text_area.config(state=tk.DISABLED)
+
+    def display_processed_output(self, output_file_path: str, processing_returned_empty: bool = False):
+        """
+        Reads the processed output from the given file path and displays it in the UI.
+        Handles cases where the processing returned no speech or the file is not found.
+        """
+        logging.info(f"UI: Displaying results from '{output_file_path}'. processing_returned_empty: {processing_returned_empty}")
+        try:
+            if processing_returned_empty:
+                self.update_output_text("No speech was detected or transcribed from the audio file.")
+                logging.info("UI: Displayed 'no speech detected' message.")
+                return
+
+            # This part only runs if processing_returned_empty is False
+            with open(output_file_path, 'r', encoding='utf-8') as f:
+                output_text = f.read()
+
+            if output_text.strip():
+                self.update_output_text(output_text)
+                logging.info("UI: Results displayed successfully.")
+            else: # File is empty, but we didn't expect it to be
+                self.update_output_text("Processing complete, but the output file was unexpectedly empty.")
+                logging.warning("UI: Output file was empty, though processing_returned_empty was False.")
+
+        except FileNotFoundError:
+            logging.error(f"UI: Output file '{output_file_path}' not found for display.")
+            msg_to_show = f"Error: Output file '{output_file_path}' not found. The save step might have failed or the path is incorrect."
+            self.update_output_text(msg_to_show)
+            # Consider if this specific error should also trigger a messagebox via MainApp
+        except Exception as e:
+            logging.exception("UI: An unexpected error occurred during display_processed_output.")
+            err_msg = f"An error occurred while trying to display results: {str(e)}"
+            self.update_output_text(err_msg)
