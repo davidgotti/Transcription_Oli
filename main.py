@@ -153,69 +153,61 @@ class MainApp:
 
     def _processing_thread_worker(self, current_audio_file):
         logging.info(f"Thread worker: Starting audio processing for: {current_audio_file}")
+        # Initialize default/fallback values
         final_status_for_queue = constants.STATUS_ERROR
         error_message_for_queue = "An unknown error occurred in the processing thread."
         is_empty_for_queue = False
-        processed_segments_for_payload = None # Initialize
+        processed_segments_for_payload = None
 
         try:
             if not self.audio_processor or not self.audio_processor.are_models_loaded():
                 logging.error("Thread worker: Audio processor or its models are not ready at thread start.")
                 error_message_for_queue = "Critical error: Audio processor or models became unavailable."
+                # final_status_for_queue is already STATUS_ERROR
             else:
-                processed_segments = self.audio_processor.process_audio(current_audio_file)
+                # This is the main change here:
+                result = self.audio_processor.process_audio(current_audio_file)
 
-                if isinstance(processed_segments, list) and processed_segments:
-                    is_special_message = (len(processed_segments) == 1 and
-                                          isinstance(processed_segments[0], str) and
-                                          ("Error:" in processed_segments[0] or
-                                           "No " in processed_segments[0] or # "No speech detected", "No transcription segments"
-                                           "failed" in processed_segments[0].lower() or
-                                           "Note:" in processed_segments[0] )) # "Note: Alignment produced no output"
+                final_status_for_queue = result.status
+                error_message_for_queue = result.message # Will be None if status is SUCCESS and no specific message
+                is_empty_for_queue = result.status == constants.STATUS_EMPTY
+                processed_segments_for_payload = result.data if result.status == constants.STATUS_SUCCESS else None
 
-
-                    if is_special_message:
-                        # Check for conditions that should be treated as "empty" vs "error"
-                        if "No " in processed_segments[0] or \
-                           "no speech" in processed_segments[0].lower() or \
-                           "no segments to align" in processed_segments[0].lower() or \
-                           ( "Note:" in processed_segments[0] and "yielded no formatted lines" in processed_segments[0]): # Alignment note
-                            final_status_for_queue = constants.STATUS_EMPTY
-                            is_empty_for_queue = True
-                            error_message_for_queue = processed_segments[0] # This is the message to display
-                        else: # Treat other messages like "Error:" or "failed" as errors
-                            final_status_for_queue = constants.STATUS_ERROR
-                            error_message_for_queue = processed_segments[0]
-                    else:
-                        # This is the successful case with actual segments
-                        final_status_for_queue = constants.STATUS_SUCCESS
-                        is_empty_for_queue = False
-                        processed_segments_for_payload = processed_segments # Store for payload
-                        # Saving is now handled by the main thread after user input
-                        logging.info("Thread worker: Audio processing complete. Segments ready.")
-                else: # Empty list or None returned
-                    logging.warning("Thread worker: Audio processing returned no segments or an empty list.")
-                    final_status_for_queue = constants.STATUS_EMPTY
-                    is_empty_for_queue = True
-                    error_message_for_queue = "No speech was detected or transcribed from the audio."
+                if result.status == constants.STATUS_SUCCESS:
+                    logging.info(f"Thread worker: Audio processing complete. Segments ready ({len(processed_segments_for_payload) if processed_segments_for_payload else 0} segments).")
+                    if not processed_segments_for_payload: # Success status but no actual segments data
+                        logging.warning("Thread worker: Processing reported success but returned no segments.")
+                        final_status_for_queue = constants.STATUS_EMPTY # Treat as empty if no data
+                        is_empty_for_queue = True
+                        error_message_for_queue = result.message or "Processing was successful but yielded no segments."
+                elif result.status == constants.STATUS_EMPTY:
+                    logging.warning(f"Thread worker: Audio processing resulted in empty output. Message: {result.message}")
+                    # error_message_for_queue is already set from result.message
+                elif result.status == constants.STATUS_ERROR:
+                    logging.error(f"Thread worker: Audio processing failed. Message: {result.message}")
+                    # error_message_for_queue is already set from result.message
 
         except Exception as e:
             logging.exception("Thread worker: Unhandled error during audio processing.")
             error_message_for_queue = f"Unexpected error in processing thread: {str(e)}"
             final_status_for_queue = constants.STATUS_ERROR # Ensure it's error status
+            is_empty_for_queue = False # Explicitly set for clarity
+            processed_segments_for_payload = None
         finally:
             logging.info(f"Thread worker: Finalizing with status '{final_status_for_queue}'.")
             completion_payload = {
                 "type": constants.MSG_TYPE_COMPLETED,
                 constants.KEY_FINAL_STATUS: final_status_for_queue,
-                constants.KEY_ERROR_MESSAGE: error_message_for_queue if final_status_for_queue != constants.STATUS_SUCCESS else None,
+                # Ensure error_message is None for pure success, or holds relevant info for EMPTY/ERROR
+                constants.KEY_ERROR_MESSAGE: error_message_for_queue if final_status_for_queue != constants.STATUS_SUCCESS or (final_status_for_queue == constants.STATUS_SUCCESS and processed_segments_for_payload is None) else None,
                 constants.KEY_IS_EMPTY_RESULT: is_empty_for_queue
             }
             if final_status_for_queue == constants.STATUS_SUCCESS and processed_segments_for_payload:
                 completion_payload["processed_segments"] = processed_segments_for_payload
-            
+
             self.ui_update_queue.put(completion_payload)
             logging.info("Thread worker: Completion message put on ui_update_queue.")
+
 
     def _prompt_for_save_location_and_save(self, segments_to_save: list):
         logging.info("Prompting user for save location.")
