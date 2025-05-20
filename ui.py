@@ -1,7 +1,7 @@
 # ui.py
 import tkinter as tk
 from tkinter import ttk
-import logging # Added logging
+import logging
 
 class UI:
     def __init__(self, root, start_processing_callback, select_audio_file_callback):
@@ -42,52 +42,49 @@ class UI:
         self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=300, mode="determinate")
         self.progress_bar.grid(row=6, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
-        # Output Area (adjust row if needed due to new widgets)
+        # Output Area
         self.output_label = ttk.Label(root, text="Processed Output:")
-        self.output_label.grid(row=7, column=0, padx=5, pady=5, sticky="w") # Adjusted row
+        self.output_label.grid(row=7, column=0, padx=5, pady=5, sticky="w")
 
         self.output_text_area = tk.Text(root, height=15, width=70)
-        self.output_text_area.grid(row=8, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") # Adjusted row
+        self.output_text_area.grid(row=8, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
         self.output_text_area.config(state=tk.DISABLED)
 
         root.grid_columnconfigure(1, weight=1)
-        root.grid_rowconfigure(8, weight=1) # Adjusted row for text area weight
+        root.grid_rowconfigure(8, weight=1)
 
         self.elements_to_disable = [
             self.browse_button, self.process_button, self.audio_file_entry,
             self.token_entry, self.save_token_button
         ]
-        self.save_token_callback = None # Placeholder for the callback function
+        self.save_token_callback = None
 
     def update_status_and_progress(self, status_text=None, progress_value=None):
         if status_text is not None:
             self.status_label.config(text=f"Status: {status_text}")
         if progress_value is not None:
             self.progress_bar['value'] = progress_value
-        self.root.update_idletasks() # Ensure UI updates immediately
+        self.root.update_idletasks()
 
     def set_save_token_callback(self, callback):
-        """Sets the callback function to save the token."""
         self.save_token_callback = callback
 
     def save_token_ui(self):
-        """Gets the token from the entry and calls the save token callback."""
         if self.save_token_callback:
             token = self.token_entry.get()
             self.save_token_callback(token)
 
     def load_token_ui(self, token):
-        """Populates the token entry field."""
         self.token_entry.delete(0, tk.END)
         self.token_entry.insert(0, token)
 
     def disable_ui(self):
-        logging.debug("ui.py: disable_ui: Disabling UI elements.") # Changed print to logging
+        logging.debug("ui.py: disable_ui: Disabling UI elements.")
         for element in self.elements_to_disable:
             element.config(state=tk.DISABLED)
 
     def enable_ui(self):
-        logging.debug("ui.py: enable_ui: Enabling UI elements.") # Changed print to logging
+        logging.debug("ui.py: enable_ui: Enabling UI elements.")
         for element in self.elements_to_disable:
             element.config(state=tk.NORMAL)
 
@@ -97,35 +94,47 @@ class UI:
         self.output_text_area.insert(tk.END, text)
         self.output_text_area.config(state=tk.DISABLED)
 
-    def display_processed_output(self, output_file_path: str, processing_returned_empty: bool = False):
+    def display_processed_output(self, output_file_path: str = None, processing_returned_empty: bool = False):
         """
-        Reads the processed output from the given file path and displays it in the UI.
-        Handles cases where the processing returned no speech or the file is not found.
+        Displays processed output. If processing_returned_empty is True, shows a specific message.
+        Otherwise, tries to read from output_file_path.
         """
-        logging.info(f"UI: Displaying results from '{output_file_path}'. processing_returned_empty: {processing_returned_empty}")
+        logging.info(f"UI: Displaying results. Path: '{output_file_path}', Empty: {processing_returned_empty}")
         try:
             if processing_returned_empty:
-                self.update_output_text("No speech was detected or transcribed from the audio file.")
-                logging.info("UI: Displayed 'no speech detected' message.")
+                # This specific message comes from the AudioProcessor or MainApp if no speech was detected
+                # or if diarization/transcription results in an empty interpretable output.
+                self.update_output_text("No speech was detected or transcribed from the audio file, or the processing yielded no usable segments.")
+                logging.info("UI: Displayed 'no speech/segments' message.")
                 return
 
-            # This part only runs if processing_returned_empty is False
+            if not output_file_path:
+                # This case might happen if processing was meant to be successful but somehow
+                # the path was not provided to display_processed_output.
+                # The main app should handle this, but as a fallback:
+                msg_to_show = "Error: No output file path provided to display results, though processing was not marked as empty."
+                logging.error(f"UI: {msg_to_show}")
+                self.update_output_text(msg_to_show)
+                return
+
+            # If not empty and path is provided, read the file
             with open(output_file_path, 'r', encoding='utf-8') as f:
                 output_text = f.read()
 
             if output_text.strip():
                 self.update_output_text(output_text)
-                logging.info("UI: Results displayed successfully.")
-            else: # File is empty, but we didn't expect it to be
-                self.update_output_text("Processing complete, but the output file was unexpectedly empty.")
-                logging.warning("UI: Output file was empty, though processing_returned_empty was False.")
+                logging.info(f"UI: Results from '{output_file_path}' displayed successfully.")
+            else: # File is empty, but we didn't expect it to be (as processing_returned_empty was False)
+                self.update_output_text(f"Processing complete, but the output file ('{output_file_path}') was unexpectedly empty.")
+                logging.warning(f"UI: Output file '{output_file_path}' was empty, though processing_returned_empty was False.")
 
         except FileNotFoundError:
             logging.error(f"UI: Output file '{output_file_path}' not found for display.")
-            msg_to_show = f"Error: Output file '{output_file_path}' not found. The save step might have failed or the path is incorrect."
+            msg_to_show = (f"Error: Output file '{output_file_path}' not found. "
+                           "The save step might have failed or the path is incorrect. "
+                           "Content might have been shown directly if save was cancelled or failed.")
             self.update_output_text(msg_to_show)
-            # Consider if this specific error should also trigger a messagebox via MainApp
         except Exception as e:
             logging.exception("UI: An unexpected error occurred during display_processed_output.")
-            err_msg = f"An error occurred while trying to display results: {str(e)}"
+            err_msg = f"An error occurred while trying to display results from '{output_file_path}': {str(e)}"
             self.update_output_text(err_msg)
