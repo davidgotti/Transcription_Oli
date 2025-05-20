@@ -1,0 +1,11 @@
+# Configuration files with secrets
+config.ini
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+venv/
+env/
