@@ -2,7 +2,7 @@
 import logging
 import torch
 import whisper
-# from utils import constants
+import time # For timing the transcription process
 
 logger = logging.getLogger(__name__)
 
@@ -19,47 +19,66 @@ class TranscriptionHandler:
             try:
                 self.progress_callback(message, percentage)
             except Exception as e:
-                logger.error(f"Error in TranscriptionHandler progress_callback: {e}", exc_info=True)
+                # Avoid crashing the handler if the callback itself fails
+                logger.error(f"Error in TranscriptionHandler's progress_callback: {e}", exc_info=True)
 
     def _load_model(self):
-        self._report_progress(f"Loading transcription model ({self.model_name})...", 15) # Base progress
-        logger.info(f"TranscriptionHandler: Loading Whisper model ('{self.model_name}')...")
+        self._report_progress(f"Transcription model ({self.model_name}): Initializing...", 15) # Overall progress
+        logger.info(f"TranscriptionHandler: Loading Whisper model ('{self.model_name}') on device '{self.device}'...")
         try:
             self.model = whisper.load_model(self.model_name, device=self.device)
-            logger.info("TranscriptionHandler: Whisper model loaded successfully.")
-            self._report_progress("Transcription model loaded.", 20) # Base progress
+            logger.info(f"TranscriptionHandler: Whisper model '{self.model_name}' loaded successfully.")
+            self._report_progress(f"Transcription model ({self.model_name}): Loaded.", 20) # Overall progress
         except Exception as e:
             logger.exception(f"TranscriptionHandler: Error loading Whisper model ('{self.model_name}').")
-            self._report_progress(f"Error loading transcription model.", 15)
+            self._report_progress(f"Transcription model ({self.model_name}): Load Error ({str(e)[:50]}...).", 15)
             self.model = None
 
     def is_model_loaded(self) -> bool:
         return self.model is not None
 
-    def transcribe(self, audio_path: str) -> dict:
+    def transcribe(self, audio_path: str) -> dict: # Returns dict like {'text': str, 'segments': list}
         if not self.is_model_loaded():
             logger.error("TranscriptionHandler: Model is not initialized. Skipping transcription.")
-            self._report_progress("Transcription skipped (model not loaded).", 55) # Progress within AudioProcessor's scale
+            self._report_progress("Transcription: Skipped (model not loaded).", 55) # Example progress
             return {'text': '', 'segments': []}
 
-        logger.info(f"TranscriptionHandler: Starting transcription for {audio_path}...")
-        self._report_progress("Transcription analysis starting...", 55) # Progress within AudioProcessor's scale
-        decoding_options_dict = {"fp16": False if self.device.type == "cpu" else True}
+        logger.info(f"TranscriptionHandler: Starting transcription for {audio_path} using model '{self.model_name}'...")
+        self._report_progress("Transcription: Analysis starting...", 55) # Example progress
+        
+        # fp16 is only for CUDA devices. Set to False for CPU.
+        decoding_options_dict = {"fp16": self.device.type == "cuda"}
+        logger.debug(f"Transcription decoding options: {decoding_options_dict}")
+
+        start_time = time.time()
         try:
-            result = self.model.transcribe(audio_path, **decoding_options_dict)
-            logger.debug(f"TranscriptionHandler: Raw Whisper transcription result: {str(result)[:200]}...")
-            if not result or 'segments' not in result:
-                logger.warning("TranscriptionHandler: Whisper transcription result is missing 'segments'.")
-                self._report_progress("Transcription malformed or no segments.", 70)
-                return {'text': result.get('text', ''), 'segments': []}
-            if not result['segments']:
-                logger.info("TranscriptionHandler: Whisper transcription produced no segments (possibly no speech detected).")
-                self._report_progress("No speech detected by Whisper.", 70)
+            # The `transcribe` method of whisper.model.Whisper can take various arguments.
+            # For simplicity, we're using basic options.
+            # `language` can be specified if known, otherwise Whisper auto-detects.
+            # `verbose=False` (default) or `True` for more console output from Whisper.
+            result = self.model.transcribe(audio_path, **decoding_options_dict, verbose=None) # verbose=None uses default
+            
+            duration = time.time() - start_time
+            logger.info(f"TranscriptionHandler: Transcription analysis for '{audio_path}' took {duration:.2f} seconds.")
+            
+            # Validate result structure
+            if not isinstance(result, dict) or 'segments' not in result or 'text' not in result:
+                logger.warning(f"TranscriptionHandler: Whisper transcription result for '{audio_path}' has unexpected structure: {type(result)}")
+                self._report_progress("Transcription: Malformed result or no segments.", 70)
+                return {'text': str(result.get('text','')) if isinstance(result, dict) else '', 'segments': []} # Attempt to salvage text if possible
+
+            if not result['segments']: # No speech detected or no segments produced
+                logger.info(f"TranscriptionHandler: Whisper transcription produced no segments for '{audio_path}' (possibly no speech detected). Full text: '{result.get('text','')}'")
+                self._report_progress("Transcription: No speech segments detected.", 70)
             else:
-                logger.info(f"TranscriptionHandler: Transcription complete. Found {len(result['segments'])} segments.")
-                self._report_progress("Transcription analysis complete.", 70)
-            return result
+                num_segments = len(result['segments'])
+                logger.info(f"TranscriptionHandler: Transcription complete for '{audio_path}'. Found {num_segments} segment(s).")
+                self._report_progress(f"Transcription: Analysis complete ({num_segments} segment(s)).", 70)
+            
+            return result # Expected: {'text': '...', 'segments': [{'id':..., 'start':..., 'end':..., 'text':...}, ...], 'language': '...'}
+        
         except Exception as e:
-            logger.exception(f"TranscriptionHandler: Error during Whisper transcription for {audio_path}.")
-            self._report_progress("Error during transcription analysis.", 55)
-            return {'text': '', 'segments': []}
+            duration = time.time() - start_time
+            logger.exception(f"TranscriptionHandler: Error during Whisper transcription for {audio_path} after {duration:.2f} seconds.")
+            self._report_progress(f"Transcription: Error during analysis ({str(e)[:50]}...).", 55)
+            return {'text': '', 'segments': []} # Return empty on error
