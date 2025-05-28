@@ -1,5 +1,6 @@
 # Configuration files with secrets
 config.ini
+transcription_app.log
 
 # Python specific
 __pycache__/

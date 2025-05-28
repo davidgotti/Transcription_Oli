@@ -20,6 +20,10 @@ STATUS_ERROR = "ERROR"
 DEFAULT_OUTPUT_TEXT_FILE = "processed_output.txt"
 DEFAULT_CONFIG_FILE = 'config.ini'
 
+# --- Special Labels ---
+# Used internally in CorrectionWindow for segments parsed without explicit speaker info
+NO_SPEAKER_LABEL = "SPEAKER_NONE_INTERNAL" 
+
 # --- Logging Configuration ---
 LOG_LEVEL_DEBUG = logging.DEBUG
 LOG_LEVEL_INFO = logging.INFO
