@@ -1,4 +1,6 @@
 # ui/correction_window.py
+# Relevant changes are in the _open_assign_speakers_dialog method
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import logging
@@ -793,7 +795,8 @@ class CorrectionWindow:
 
         add_new_speaker_frame = ttk.Frame(inner_frame) 
         add_new_speaker_frame.pack(fill=tk.X, pady=(5,10), padx=5)
-        ttk.Label(add_new_speaker_frame, text="Add New Speaker -> Raw ID:").pack(side=tk.LEFT, padx=(0,2))
+        # Changed label for adding new speaker
+        ttk.Label(add_new_speaker_frame, text="Add New Speaker (Raw ID):").pack(side=tk.LEFT, padx=(0,2))
         new_raw_id_var = tk.StringVar()
         new_raw_id_entry = ttk.Entry(add_new_speaker_frame, textvariable=new_raw_id_var, width=15)
         new_raw_id_entry.pack(side=tk.LEFT, padx=2)
@@ -850,6 +853,7 @@ class CorrectionWindow:
             dialog.unbind_all("<MouseWheel>")
             dialog.destroy()
 
+        # Ensure Save and Cancel buttons are created and packed
         ttk.Button(btn_frame, text="Save", command=on_save_dialog).pack(side=tk.RIGHT, padx=5) 
         ttk.Button(btn_frame, text="Cancel", command=on_cancel_dialog).pack(side=tk.RIGHT) 
         
