@@ -1,4 +1,4 @@
-# constants.py
+# utils/constants.py
 import logging
 
 # --- Message types for the queue ---
@@ -22,7 +22,7 @@ DEFAULT_CONFIG_FILE = 'config.ini'
 
 # --- Special Labels ---
 # Used internally in CorrectionWindow for segments parsed without explicit speaker info
-NO_SPEAKER_LABEL = "SPEAKER_NONE_INTERNAL" 
+NO_SPEAKER_LABEL = "SPEAKER_NONE_INTERNAL"
 
 # --- Logging Configuration ---
 LOG_LEVEL_DEBUG = logging.DEBUG
@@ -32,3 +32,13 @@ ACTIVE_LOG_LEVEL = LOG_LEVEL_DEBUG # Or LOG_LEVEL_INFO for release
 
 LOG_FORMAT = '%(asctime)s %(levelname)-8s [%(threadName)s] [%(filename)s:%(lineno)d] %(funcName)s - %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# --- Message types for batch processing ---
+MSG_TYPE_BATCH_FILE_START = "BATCH_FILE_START"
+MSG_TYPE_BATCH_COMPLETED = "BATCH_PROCESSING_COMPLETED"
+
+# --- Payload keys for BATCH messages ---
+KEY_BATCH_FILENAME = "filename"
+KEY_BATCH_CURRENT_IDX = "current_idx"
+KEY_BATCH_TOTAL_FILES = "total_files"
+KEY_BATCH_ALL_RESULTS = "all_results"

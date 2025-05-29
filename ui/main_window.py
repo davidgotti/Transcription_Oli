@@ -58,14 +58,15 @@ class UI:
         token_frame.columnconfigure(1, weight=1)
 
         # --- Audio File Selection ---
-        file_frame = ttk.LabelFrame(root, text="Audio File", padding=(10,5))
+        file_frame = ttk.LabelFrame(root, text="Audio File(s)", padding=(10,5))
         file_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
-        self.audio_file_label = ttk.Label(file_frame, text="File Path:")
+        self.audio_file_label = ttk.Label(file_frame, text="File Path(s):")
         self.audio_file_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         self.audio_file_entry = ttk.Entry(file_frame, width=50)
         self.audio_file_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        self.audio_file_entry.config(state=tk.DISABLED) # Display only
 
         self.browse_button = ttk.Button(file_frame, text="Browse...", command=self.select_audio_file_callback)
         self.browse_button.grid(row=0, column=2, padx=5, pady=5, sticky="w")
@@ -142,7 +143,7 @@ class UI:
         progress_status_frame.columnconfigure(0, weight=1)
 
         # --- Output Area ---
-        output_frame = ttk.LabelFrame(root, text="Processed Output", padding=(10,5))
+        output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5))
         output_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
 
         self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD)
@@ -157,14 +158,14 @@ class UI:
         output_frame.rowconfigure(0, weight=1)
 
         # --- Correction Window Button ---
-        self.correction_button = ttk.Button(root, text="Transcript Correction", command=self.open_correction_window_callback)
+        self.correction_button = ttk.Button(root, text="Transcript Correction (Last Successful)", command=self.open_correction_window_callback)
         self.correction_button.grid(row=6, column=0, columnspan=3, padx=5, pady=10, sticky="ew")
 
         root.columnconfigure(0, weight=1)
         root.rowconfigure(5, weight=1)
 
         self.elements_to_disable_during_processing = [
-            self.browse_button, self.process_button, self.audio_file_entry,
+            self.browse_button, self.process_button, # audio_file_entry is already disabled for direct input
             self.token_entry, self.save_token_button, self.correction_button,
             self.diarization_checkbutton, self.timestamps_checkbutton,
             self.model_dropdown, self.end_times_checkbutton
@@ -241,6 +242,7 @@ class UI:
                  element.configure(state=tk.DISABLED)
             elif hasattr(element, 'config'):
                  element.config(state=tk.DISABLED)
+        # self.audio_file_entry is already disabled, no need to touch it here.
 
     def enable_ui_after_processing(self):
         logger.debug("UI: Enabling UI elements after processing.")
@@ -251,6 +253,18 @@ class UI:
                  element.config(state=tk.NORMAL)
         # Special handling for end_times_checkbutton based on timestamps_checkbutton state
         self._toggle_end_time_option()
+        # self.audio_file_entry remains disabled for direct input.
+
+    def update_audio_file_entry_display(self, file_paths: list):
+        self.audio_file_entry.config(state=tk.NORMAL)
+        self.audio_file_entry.delete(0, tk.END)
+        if not file_paths:
+            self.audio_file_entry.insert(0, "")
+        elif len(file_paths) == 1:
+            self.audio_file_entry.insert(0, file_paths[0])
+        else:
+            self.audio_file_entry.insert(0, f"{len(file_paths)} files selected")
+        self.audio_file_entry.config(state=tk.DISABLED)
 
 
     def update_output_text(self, text_content: str):
@@ -260,18 +274,24 @@ class UI:
         self.output_text_area.config(state=tk.DISABLED)
         logger.debug(f"Output text area updated with content (first 100 chars): '{text_content[:100]}...'")
 
-    def display_processed_output(self, output_file_path: str = None, processing_returned_empty: bool = False):
-        logger.info(f"UI: Displaying results. Path: '{output_file_path}', Empty: {processing_returned_empty}")
+    def display_processed_output(self, output_file_path: str = None, processing_returned_empty: bool = False, is_batch_summary: bool = False, batch_summary_message: str = ""):
+        logger.info(f"UI: Displaying results. Path: '{output_file_path}', Empty: {processing_returned_empty}, BatchSummary: {is_batch_summary}")
         try:
+            if is_batch_summary:
+                self.update_output_text(batch_summary_message)
+                logger.info("UI: Displayed batch summary message.")
+                return
+
             if processing_returned_empty:
                 self.update_output_text("No speech was detected or transcribed from the audio file, or the processing yielded no usable segments.")
                 logger.info("UI: Displayed 'no speech/segments' message.")
                 return
 
-            if not output_file_path:
-                msg_to_show = "Error: No output file path provided to display results, though processing was not marked as empty."
-                logger.error(f"UI: {msg_to_show}")
-                self.update_output_text(msg_to_show)
+            if not output_file_path: # Should only happen for single file error before save or cancelled save
+                msg_to_show = ("No output file path provided to display results. "
+                               "Content might have been shown directly if save was cancelled or failed, or an error occurred before saving.")
+                logger.warning(f"UI: {msg_to_show}")
+                # self.update_output_text(msg_to_show) # Avoid overwriting potentially direct error text
                 return
 
             with open(output_file_path, 'r', encoding='utf-8') as f:
@@ -287,8 +307,7 @@ class UI:
         except FileNotFoundError:
             logger.error(f"UI: Output file '{output_file_path}' not found for display.")
             msg_to_show = (f"Error: Output file '{output_file_path}' not found. "
-                           "The save step might have failed or the path is incorrect. "
-                           "Content might have been shown directly if save was cancelled or failed.")
+                           "The save step might have failed or the path is incorrect. ")
             self.update_output_text(msg_to_show)
         except Exception as e:
             logger.exception("UI: An unexpected error occurred during display_processed_output.")

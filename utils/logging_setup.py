@@ -37,13 +37,14 @@ def setup_logging():
 
     # File Handler
     try:
-        file_handler = logging.FileHandler(LOG_FILE_PATH, mode='a', encoding='utf-8') # 'a' for append, utf-8 for encoding
+        # Changed mode from 'a' (append) to 'w' (write) to reset log on each run
+        file_handler = logging.FileHandler(LOG_FILE_PATH, mode='w', encoding='utf-8') # 'w' for write, utf-8 for encoding
         file_formatter = logging.Formatter(constants.LOG_FORMAT, datefmt=constants.LOG_DATE_FORMAT)
         file_handler.setFormatter(file_formatter)
         # File handler can log at a more verbose level, e.g., DEBUG
         # file_handler.setLevel(logging.DEBUG) 
         logger.addHandler(file_handler)
-        initial_log_message = "Logging configured. Console and File handlers active."
+        initial_log_message = "Logging configured. Console and File handlers active. Log file reset for this session."
     except IOError as e:
         # If file handler fails (e.g., permissions), log to console about it
         logger.addHandler(console_handler) # Ensure console handler is still there
