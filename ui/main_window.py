@@ -1,9 +1,37 @@
 # ui/main_window.py
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import logging
 
 logger = logging.getLogger(__name__)
+
+class ToolTip:
+    """
+    Create a tooltip for a given widget.
+    """
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+
+    def show_tooltip(self, event=None):
+        x, y, _, _ = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 25
+
+        self.tooltip_window = tk.Toplevel(self.widget)
+        self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.wm_geometry(f"+{x}+{y}")
+
+        label = ttk.Label(self.tooltip_window, text=self.text, background="#FFFFE0", relief="solid", borderwidth=1, padding=(5,2))
+        label.pack(ipadx=1)
+
+    def hide_tooltip(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+        self.tooltip_window = None
 
 class UI:
     def __init__(self, root, start_processing_callback, select_audio_file_callback, open_correction_window_callback):
@@ -27,7 +55,7 @@ class UI:
         self.save_token_button = ttk.Button(token_frame, text="Save Token", command=self.save_token_ui)
         self.save_token_button.grid(row=0, column=2, padx=5, pady=5, sticky="w")
         
-        token_frame.columnconfigure(1, weight=1) # Allow token entry to expand
+        token_frame.columnconfigure(1, weight=1)
 
         # --- Audio File Selection ---
         file_frame = ttk.LabelFrame(root, text="Audio File", padding=(10,5))
@@ -42,42 +70,82 @@ class UI:
         self.browse_button = ttk.Button(file_frame, text="Browse...", command=self.select_audio_file_callback)
         self.browse_button.grid(row=0, column=2, padx=5, pady=5, sticky="w")
         
-        file_frame.columnconfigure(1, weight=1) # Allow audio file entry to expand
+        file_frame.columnconfigure(1, weight=1)
 
         # --- Processing Options Frame ---
-        options_frame = ttk.LabelFrame(root, text="Processing Options", padding=(10, 5))
-        options_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew")
+        options_outer_frame = ttk.LabelFrame(root, text="Processing Options", padding=(10, 5))
+        options_outer_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew")
+        options_outer_frame.columnconfigure(0, weight=1) # Allow inner frame to expand
 
-        self.enable_diarization_var = tk.BooleanVar(value=True) # Default to True
-        self.diarization_checkbutton = ttk.Checkbutton(options_frame, text="Enable Speaker Diarization", variable=self.enable_diarization_var)
-        self.diarization_checkbutton.pack(side=tk.LEFT, padx=10, pady=5) # pack for horizontal layout
+        # --- Model Selection ---
+        model_selection_frame = ttk.Frame(options_outer_frame)
+        model_selection_frame.pack(fill=tk.X, pady=(0,5)) # Use pack for this sub-frame
+
+        self.model_label = ttk.Label(model_selection_frame, text="Transcription Model:")
+        self.model_label.pack(side=tk.LEFT, padx=(0,5), pady=5)
+
+        self.model_var = tk.StringVar()
+        self.model_options = {
+            "tiny": "Tiny: Fastest, lowest accuracy, ~39M params. Good for quick tests.",
+            "base": "Base: Faster, better accuracy than tiny, ~74M params.",
+            "small": "Small: Balanced speed and accuracy, ~244M params.",
+            "medium": "Medium: Slower, good accuracy, ~769M params.",
+            "large (recommended)": "Large (v3): Slowest, highest accuracy, ~1550M params. Recommended for best results.",
+            "turbo": "Turbo (uses 'small'): A faster option, currently maps to 'small' model for broader compatibility."
+        }
         
-        self.include_timestamps_var = tk.BooleanVar(value=True) # Default to True
-        self.timestamps_checkbutton = ttk.Checkbutton(options_frame, text="Include Timestamps in Output", variable=self.include_timestamps_var)
-        self.timestamps_checkbutton.pack(side=tk.LEFT, padx=10, pady=5) # pack for horizontal layout
+        self.model_dropdown = ttk.Combobox(model_selection_frame, textvariable=self.model_var, 
+                                           values=list(self.model_options.keys()), state="readonly", width=25)
+        self.model_dropdown.set("large (recommended)") # Default selection
+        self.model_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
+        self.model_dropdown.bind("<<ComboboxSelected>>", self.show_model_tooltip)
+        self.model_dropdown.bind("<Enter>", self.show_model_tooltip_on_hover)
+        self.model_dropdown.bind("<Leave>", self.hide_model_tooltip_on_hover)
+        
+        self.model_tooltip_label = ttk.Label(model_selection_frame, text="", wraplength=300, foreground="grey")
+        self.model_tooltip_label.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
+        self.show_model_tooltip() # Show initial tooltip
+
+        # --- Other Processing Options (Diarization, Timestamps) ---
+        checkbox_options_frame = ttk.Frame(options_outer_frame)
+        checkbox_options_frame.pack(fill=tk.X, pady=(5,0))
+
+        self.enable_diarization_var = tk.BooleanVar(value=True)
+        self.diarization_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Enable Speaker Diarization", variable=self.enable_diarization_var)
+        self.diarization_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        self.include_timestamps_var = tk.BooleanVar(value=True)
+        self.timestamps_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Include Timestamps in Output", 
+                                                      variable=self.include_timestamps_var, command=self._toggle_end_time_option)
+        self.timestamps_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
+
+        self.include_end_times_var = tk.BooleanVar(value=False) # Default to False (start time only if timestamps active)
+        self.end_times_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Include End Times", 
+                                                     variable=self.include_end_times_var, state=tk.DISABLED)
+        self.end_times_checkbutton.pack(side=tk.LEFT, padx=(0,10), pady=5)
+        self._toggle_end_time_option() # Set initial state
 
         # --- Processing Button ---
         self.process_button = ttk.Button(root, text="Start Processing", command=self.start_processing_callback)
         self.process_button.grid(row=3, column=0, columnspan=3, padx=5, pady=10, sticky="ew")
 
         # --- Progress Bar and Status Label ---
-        progress_status_frame = ttk.Frame(root) # Frame to group status and progress bar
+        progress_status_frame = ttk.Frame(root)
         progress_status_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
         self.status_label = ttk.Label(progress_status_frame, text="Status: Idle")
-        self.status_label.pack(side=tk.TOP, fill=tk.X, expand=True) # Use pack for simpler layout within this frame
+        self.status_label.pack(side=tk.TOP, fill=tk.X, expand=True)
 
         self.progress_bar = ttk.Progressbar(progress_status_frame, orient="horizontal", length=300, mode="determinate")
         self.progress_bar.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(5,0))
         
         progress_status_frame.columnconfigure(0, weight=1)
 
-
         # --- Output Area ---
         output_frame = ttk.LabelFrame(root, text="Processed Output", padding=(10,5))
         output_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
 
-        self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD) # wrap=tk.WORD
+        self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD)
         self.output_scrollbar = ttk.Scrollbar(output_frame, orient=tk.VERTICAL, command=self.output_text_area.yview)
         self.output_text_area.configure(yscrollcommand=self.output_scrollbar.set)
         
@@ -88,24 +156,59 @@ class UI:
         output_frame.columnconfigure(0, weight=1)
         output_frame.rowconfigure(0, weight=1)
 
-
         # --- Correction Window Button ---
-        # Changed text as per item 3
         self.correction_button = ttk.Button(root, text="Transcript Correction", command=self.open_correction_window_callback)
         self.correction_button.grid(row=6, column=0, columnspan=3, padx=5, pady=10, sticky="ew")
 
-        # --- Configure grid weights for main window resizing ---
-        root.columnconfigure(0, weight=1) # Allow the single column of frames to expand
-        # root.columnconfigure(1, weight=1) # Not needed if all frames span 3 columns
-        # root.columnconfigure(2, weight=1) # Not needed
-        root.rowconfigure(5, weight=1) # Allow output_frame (containing text area) to expand vertically
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(5, weight=1)
 
         self.elements_to_disable_during_processing = [
             self.browse_button, self.process_button, self.audio_file_entry,
             self.token_entry, self.save_token_button, self.correction_button,
-            self.diarization_checkbutton, self.timestamps_checkbutton
+            self.diarization_checkbutton, self.timestamps_checkbutton,
+            self.model_dropdown, self.end_times_checkbutton
         ]
         self.save_token_callback = None
+        self.model_hover_tooltip = None # For hover tooltip on combobox itself
+
+    def show_model_tooltip(self, event=None):
+        selected_model_key = self.model_var.get()
+        tooltip_text = self.model_options.get(selected_model_key, "Select a model to see details.")
+        self.model_tooltip_label.config(text=tooltip_text)
+
+    def show_model_tooltip_on_hover(self, event=None):
+        # This tooltip is for when hovering over the Combobox itself
+        selected_model_key = self.model_var.get()
+        tooltip_text = self.model_options.get(selected_model_key, "Select a model.")
+        
+        # Simple delay to avoid flickering if mouse moves quickly over options
+        if hasattr(self, '_tooltip_after_id'):
+            self.root.after_cancel(self._tooltip_after_id)
+
+        self._tooltip_after_id = self.root.after(500, lambda: self._display_hover_tooltip(tooltip_text))
+        
+    def _display_hover_tooltip(self, tooltip_text):
+        if self.model_hover_tooltip:
+            self.model_hover_tooltip.hide_tooltip()
+        self.model_hover_tooltip = ToolTip(self.model_dropdown, tooltip_text)
+        self.model_hover_tooltip.show_tooltip()
+
+
+    def hide_model_tooltip_on_hover(self, event=None):
+        if hasattr(self, '_tooltip_after_id'):
+            self.root.after_cancel(self._tooltip_after_id)
+            delattr(self, '_tooltip_after_id')
+        if self.model_hover_tooltip:
+            self.model_hover_tooltip.hide_tooltip()
+            self.model_hover_tooltip = None
+
+    def _toggle_end_time_option(self):
+        if self.include_timestamps_var.get():
+            self.end_times_checkbutton.config(state=tk.NORMAL)
+        else:
+            self.end_times_checkbutton.config(state=tk.DISABLED)
+            self.include_end_times_var.set(False) # Uncheck if parent is unchecked
 
     def update_status_and_progress(self, status_text=None, progress_value=None):
         if status_text is not None:
@@ -114,7 +217,7 @@ class UI:
         if progress_value is not None:
             self.progress_bar['value'] = progress_value
             logger.debug(f"UI Progress Updated: {progress_value}%")
-        self.root.update_idletasks() # Ensure UI updates are drawn
+        self.root.update_idletasks()
 
     def set_save_token_callback(self, callback):
         self.save_token_callback = callback
@@ -127,19 +230,17 @@ class UI:
 
     def load_token_ui(self, token):
         self.token_entry.delete(0, tk.END)
-        if token: # Ensure token is not None before inserting
+        if token:
             self.token_entry.insert(0, token)
         logger.info(f"Token loaded into UI: {'Present' if token else 'Empty/None'}")
-
 
     def disable_ui_for_processing(self):
         logger.debug("UI: Disabling UI elements for processing.")
         for element in self.elements_to_disable_during_processing:
-            if hasattr(element, 'configure'): # Check if it's a standard widget
+            if hasattr(element, 'configure'):
                  element.configure(state=tk.DISABLED)
-            elif hasattr(element, 'config'): # Check for older Tkinter way
+            elif hasattr(element, 'config'):
                  element.config(state=tk.DISABLED)
-
 
     def enable_ui_after_processing(self):
         logger.debug("UI: Enabling UI elements after processing.")
@@ -148,6 +249,8 @@ class UI:
                  element.configure(state=tk.NORMAL)
             elif hasattr(element, 'config'):
                  element.config(state=tk.NORMAL)
+        # Special handling for end_times_checkbutton based on timestamps_checkbutton state
+        self._toggle_end_time_option()
 
 
     def update_output_text(self, text_content: str):
