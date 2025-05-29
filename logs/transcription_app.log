@@ -1,1 +1,178 @@
-
+2025-05-29 16:34:07 INFO     [MainThread] [logging_setup.py:59] setup_logging - Logging configured. Console and File handlers active. Log file reset for this session.
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:79] load_gif - LaunchScreen: Attempting to load GIF from: /Users/oli/Documents/Transcription_Oli/ui/loading-7528.gif
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:82] load_gif - LaunchScreen: GIF opened. Is animated: True, N_frames: 12
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 0 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 1 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 2 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 3 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 4 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 5 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 6 from 3000x3000 to 330x330
+2025-05-29 16:34:07 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 7 from 3000x3000 to 330x330
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 8 from 3000x3000 to 330x330
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 9 from 3000x3000 to 330x330
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 10 from 3000x3000 to 330x330
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:103] load_gif - Resizing frame 11 from 3000x3000 to 330x330
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:112] load_gif - LaunchScreen: Reached EOF after 12 frames.
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:119] load_gif - LaunchScreen: Loaded 12 frames for GIF.
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:122] load_gif - LaunchScreen: GIF delay set to 100 ms.
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:08 INFO     [MainThread] [main.py:50] _setup_main_ui_elements - MainApp: Setting up main UI elements (without final geometry).
+2025-05-29 16:34:08 INFO     [MainThread] [main.py:55] _setup_main_ui_elements - Available themes: ('aqua', 'clam', 'alt', 'default', 'classic')
+2025-05-29 16:34:08 INFO     [MainThread] [main.py:57] _setup_main_ui_elements - Applied 'clam' theme.
+2025-05-29 16:34:08 INFO     [MainThread] [main.py:260] _load_and_display_saved_token - Loading saved Hugging Face token...
+2025-05-29 16:34:08 INFO     [MainThread] [main_window.py:242] load_token_ui - Token loaded into UI: Empty/None
+2025-05-29 16:34:08 INFO     [MainThread] [main.py:77] _setup_main_ui_elements - MainApp: Basic UI framework setup complete (final geometry/state pending).
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [main.py:80] _load_models_in_background - MainApp: Starting model loading in background thread.
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [main.py:339] _ensure_audio_processor_initialized - Initializing/Re-initializing AudioProcessor. Model: 'large'. Initial Setup: True, ForceReinit: False
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [audio_processor.py:27] __init__ - AudioProcessor: Using device: cpu
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [audio_processor.py:34] __init__ - AudioProcessor initialized with Diarization: True, Timestamps: True, Include End Times: False
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [diarization_handler.py:28] _load_model - DiarizationHandler: Initializing pyannote.audio.Pipeline (use_auth_token_flag: False, hf_token_present: False)
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:1049] _new_conn - Starting new HTTPS connection (1): huggingface.co:443
+2025-05-29 16:34:08 DEBUG    [MainThread] [main_window.py:223] update_status_and_progress - UI Status Updated: Diarization model: Initializing...
+2025-05-29 16:34:08 DEBUG    [MainThread] [main_window.py:226] update_status_and_progress - UI Progress Updated: 5%
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:544] _make_request - https://huggingface.co:443 "HEAD /pyannote/speaker-diarization-3.1/resolve/main/config.yaml HTTP/1.1" 401 0
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:452] register_checkpoint_hooks - Registered checkpoint save hook for _speechbrain_save
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:455] register_checkpoint_hooks - Registered checkpoint load hook for _speechbrain_load
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:452] register_checkpoint_hooks - Registered checkpoint save hook for save
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:455] register_checkpoint_hooks - Registered checkpoint load hook for load
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [quirks.py:115] log_applied_quirks - Applied quirks (see `speechbrain.utils.quirks`): [allow_tf32, disable_jit_profiling]
+2025-05-29 16:34:08 INFO     [Thread-1 (_load_models_in_background)] [quirks.py:120] log_applied_quirks - Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:452] register_checkpoint_hooks - Registered checkpoint save hook for _save
+2025-05-29 16:34:08 DEBUG    [Thread-1 (_load_models_in_background)] [checkpoints.py:455] register_checkpoint_hooks - Registered checkpoint load hook for _recover
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:08 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:544] _make_request - https://huggingface.co:443 "HEAD /pyannote/segmentation-3.0/resolve/main/pytorch_model.bin HTTP/1.1" 401 0
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:544] _make_request - https://huggingface.co:443 "HEAD /pyannote/segmentation-3.0/resolve/main/config.yaml HTTP/1.1" 401 0
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [local.py:357] __init__ - open file: /Users/oli/.cache/torch/pyannote/models--pyannote--segmentation-3.0/snapshots/e66f3d3b9eb0873085418a7b813d3b369bf160bb/pytorch_model.bin
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [local.py:357] __init__ - open file: /Users/oli/.cache/torch/pyannote/models--pyannote--segmentation-3.0/snapshots/e66f3d3b9eb0873085418a7b813d3b369bf160bb/pytorch_model.bin
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:544] _make_request - https://huggingface.co:443 "HEAD /pyannote/wespeaker-voxceleb-resnet34-LM/resolve/main/pytorch_model.bin HTTP/1.1" 302 0
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [connectionpool.py:544] _make_request - https://huggingface.co:443 "HEAD /pyannote/wespeaker-voxceleb-resnet34-LM/resolve/main/config.yaml HTTP/1.1" 200 0
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [local.py:357] __init__ - open file: /Users/oli/.cache/torch/pyannote/models--pyannote--wespeaker-voxceleb-resnet34-LM/snapshots/837717ddb9ff5507820346191109dc79c958d614/pytorch_model.bin
+2025-05-29 16:34:09 DEBUG    [Thread-1 (_load_models_in_background)] [local.py:357] __init__ - open file: /Users/oli/.cache/torch/pyannote/models--pyannote--wespeaker-voxceleb-resnet34-LM/snapshots/837717ddb9ff5507820346191109dc79c958d614/pytorch_model.bin
+2025-05-29 16:34:09 INFO     [Thread-1 (_load_models_in_background)] [diarization_handler.py:43] _load_model - DiarizationHandler: Pyannote diarization pipeline loaded successfully.
+2025-05-29 16:34:09 INFO     [Thread-1 (_load_models_in_background)] [transcription_handler.py:29] _load_model - TranscriptionHandler: Loading Whisper model ('large') on device 'cpu'...
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:09 DEBUG    [MainThread] [main_window.py:223] update_status_and_progress - UI Status Updated: Diarization model: Loaded.
+2025-05-29 16:34:09 DEBUG    [MainThread] [main_window.py:226] update_status_and_progress - UI Progress Updated: 10%
+2025-05-29 16:34:09 DEBUG    [MainThread] [main_window.py:223] update_status_and_progress - UI Status Updated: Transcription model (large): Initializing...
+2025-05-29 16:34:09 DEBUG    [MainThread] [main_window.py:226] update_status_and_progress - UI Progress Updated: 15%
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:09 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:10 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:11 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:12 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:13 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:14 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:15 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:16 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 11/12
+2025-05-29 16:34:17 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 12/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 1/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 2/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 3/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 4/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 5/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 6/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 7/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 8/12
+2025-05-29 16:34:18 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 9/12
+2025-05-29 16:34:19 INFO     [MainThread] [launch_screen.py:150] animate_gif - LaunchScreen: Animating GIF frame 10/12
+2025-05-29 16:34:19 INFO     [Thread-1 (_load_models_in_background)] [transcription_handler.py:32] _load_model - TranscriptionHandler: Whisper model 'large' loaded successfully.
+2025-05-29 16:34:19 INFO     [Thread-1 (_load_models_in_background)] [main.py:358] _ensure_audio_processor_initialized - AudioProcessor initialized/verified and models loaded.
+2025-05-29 16:34:19 INFO     [Thread-1 (_load_models_in_background)] [main.py:87] _load_models_in_background - Model loading thread: _ensure_audio_processor_initialized returned True
+2025-05-29 16:34:19 INFO     [Thread-1 (_load_models_in_background)] [main.py:90] _load_models_in_background - Model loading thread: Put success=True on completion_queue.
+2025-05-29 16:34:19 DEBUG    [MainThread] [main_window.py:223] update_status_and_progress - UI Status Updated: Transcription model (large): Loaded.
+2025-05-29 16:34:19 DEBUG    [MainThread] [main_window.py:226] update_status_and_progress - UI Progress Updated: 20%
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:158] _check_completion_queue - MainThread: Got completion signal from queue. Success: True, Error: None
+2025-05-29 16:34:19 CRITICAL [MainThread] [main.py:101] _finalize_startup_on_main_thread - --- CRITICAL: ENTERING _finalize_startup_on_main_thread. models_loaded_ok=True, error_msg='None' ---
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:104] _finalize_startup_on_main_thread - Launch screen exists, attempting to close.
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:108] _finalize_startup_on_main_thread - Launch screen closed.
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:119] _finalize_startup_on_main_thread - Models loaded OK. Preparing to show main window.
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:121] _finalize_startup_on_main_thread - Applying final geometry/zoom state...
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:129] _finalize_startup_on_main_thread - Deiconifying main window...
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:131] _finalize_startup_on_main_thread - Lifting main window...
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:133] _finalize_startup_on_main_thread - Forcing focus to main window...
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:136] _finalize_startup_on_main_thread - MainApp: Application fully initialized and displayed.
+2025-05-29 16:34:19 INFO     [MainThread] [main.py:151] _finalize_startup_on_main_thread - --- EXITING _finalize_startup_on_main_thread ---
+2025-05-29 16:34:29 INFO     [MainThread] [main.py:229] open_correction_window - Attempting to open correction window.
+2025-05-29 16:34:29 INFO     [MainThread] [correction_window_logic.py:44] __init__ - SegmentManager initialized.
+2025-05-29 16:34:29 INFO     [MainThread] [correction_window_callbacks.py:29] __init__ - CorrectionCallbackHandler initialized.
+2025-05-29 16:34:29 DEBUG    [MainThread] [correction_window_ui.py:140] _configure_text_tags - Text area tags configured.
+2025-05-29 16:34:29 INFO     [MainThread] [correction_window_ui.py:127] __init__ - CorrectionWindowUI elements created.
+2025-05-29 16:34:29 INFO     [MainThread] [correction_window.py:89] __init__ - CorrectionWindow fully initialized with refactored components.
+2025-05-29 16:34:29 INFO     [MainThread] [main.py:243] open_correction_window - New correction window created with TS: True, EndTS: False
+2025-05-29 16:34:29 INFO     [MainThread] [main.py:256] open_correction_window - No last successful transcription/audio to auto-load into correction window.
+2025-05-29 16:34:31 INFO     [MainThread] [correction_window.py:526] _on_close - CorrectionWindow: Close requested.
+2025-05-29 16:34:31 DEBUG    [MainThread] [correction_window.py:544] _on_close - CorrectionWindow: Destroying window.
+2025-05-29 16:34:35 INFO     [MainThread] [main.py:204] _on_closing - Application closing sequence initiated.
+2025-05-29 16:34:35 INFO     [MainThread] [main.py:224] _on_closing - Destroying main application window.

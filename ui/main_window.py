@@ -142,20 +142,26 @@ class UI:
         
         progress_status_frame.columnconfigure(0, weight=1)
 
-        # --- Output Area ---
-        output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5))
-        output_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
 
-        self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD)
-        self.output_scrollbar = ttk.Scrollbar(output_frame, orient=tk.VERTICAL, command=self.output_text_area.yview)
-        self.output_text_area.configure(yscrollcommand=self.output_scrollbar.set)
+        # --- Output Area ---
+        self.text_area_font = ('Helvetica', 12)
+        output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5)) #
+        output_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") #
+
+        self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD,
+                                        font=self.text_area_font,
+                                        background="white",       # <--- ADD THIS LINE
+                                        foreground="black",       # <--- ADD THIS LINE
+                                        insertbackground="black") # <--- ADD THIS (Cursor color)
+        self.output_scrollbar = ttk.Scrollbar(output_frame, orient=tk.VERTICAL, command=self.output_text_area.yview) #
+        self.output_text_area.configure(yscrollcommand=self.output_scrollbar.set) #
         
-        self.output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.output_text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.output_text_area.config(state=tk.DISABLED)
+        self.output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y) #
+        self.output_text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True) #
+        self.output_text_area.config(state=tk.DISABLED) #
         
-        output_frame.columnconfigure(0, weight=1)
-        output_frame.rowconfigure(0, weight=1)
+        output_frame.columnconfigure(0, weight=1) #
+        output_frame.rowconfigure(0, weight=1) #
 
         # --- Correction Window Button ---
         self.correction_button = ttk.Button(root, text="Transcript Correction (Last Successful)", command=self.open_correction_window_callback)

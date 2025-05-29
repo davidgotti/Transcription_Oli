@@ -25,12 +25,20 @@ class CorrectionWindowUI:
         self.audio_progress_var = tk.DoubleVar()
 
         # --- Colors and Styles ---
-        self.text_area_bg_color = "#2E2E2E"
-        self.text_area_fg_color = "white"
-        self.editing_segment_bg_color = "#4A4A70" 
-        self.timestamp_fg_color = "#AAAAAA"       
-        self.active_highlight_bg = "yellow"       
-        self.active_highlight_fg = "black"        
+        # Define a desired font for text areas (can be same as in main_window or different)
+        self.text_area_font_family = 'Helvetica' # Or your preferred font family
+        self.text_area_font_size = 12          # Example: Size 12. Adjust as needed.
+        self.text_area_base_font = (self.text_area_font_family, self.text_area_font_size)
+        self.text_area_italic_font = (self.text_area_font_family, self.text_area_font_size, 'italic')
+        self.text_area_bold_font = (self.text_area_font_family, self.text_area_font_size, 'bold')
+        # MODIFIED COLORS:
+        self.text_area_bg_color = "white"  # Changed from "#2E2E2E"
+        self.text_area_fg_color = "black"  # Changed from "white"
+        # Consider a lighter editing background, or remove custom to make it white
+        self.editing_segment_bg_color = "#E0E0FF" # Example: a very light blue/lavender, or "white"
+        self.timestamp_fg_color = "#555555" # Darker grey for better contrast on white
+        self.active_highlight_bg = "yellow"
+        self.active_highlight_fg = "black"      
 
         # --- Main layout ---
         main_container_frame = ttk.Frame(self.window, padding="10")
@@ -85,12 +93,14 @@ class CorrectionWindowUI:
         self.current_time_label.pack(side=tk.LEFT, padx=5)
 
         # --- Transcription Text Area ---
-        text_area_frame = ttk.Frame(main_container_frame)
+        text_area_frame = ttk.Frame(main_container_frame) #
         text_area_frame.pack(fill=tk.BOTH, expand=True, side=tk.TOP)
         
-        self.transcription_text = tk.Text(text_area_frame, wrap=tk.WORD, height=15, width=80, undo=True, 
-                                          background=self.text_area_bg_color, foreground=self.text_area_fg_color,
-                                          insertbackground=self.text_area_fg_color) 
+        self.transcription_text = tk.Text(text_area_frame, wrap=tk.WORD, height=15, width=80, undo=True,
+                                          background=self.text_area_bg_color,
+                                          foreground=self.text_area_fg_color,
+                                          insertbackground=self.text_area_fg_color,
+                                          font=self.text_area_base_font)
         self.text_scrollbar = ttk.Scrollbar(text_area_frame, orient=tk.VERTICAL, command=self.transcription_text.yview)
         self.transcription_text.configure(yscrollcommand=self.text_scrollbar.set)
         self.text_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -118,12 +128,14 @@ class CorrectionWindowUI:
 
     def _configure_text_tags(self):
         """Configures all necessary tags for the transcription text area."""
-        self.transcription_text.tag_configure("speaker_tag_style") 
-        self.transcription_text.tag_configure("merge_tag_style", foreground="#7FFF00", underline=True, font=('TkDefaultFont', 9, 'bold'))
+        self.transcription_text.tag_configure("speaker_tag_style")
+        # Use the bold font defined above for the merge tag
+        self.transcription_text.tag_configure("merge_tag_style", foreground="#008000", underline=True, font=self.text_area_bold_font)
         self.transcription_text.tag_configure("timestamp_tag_style", foreground=self.timestamp_fg_color)
-        self.transcription_text.tag_configure("no_timestamp_tag_style", foreground=self.timestamp_fg_color, font=('TkDefaultFont', 9, 'italic'))
+        # Use the italic font defined above for no_timestamp_tag_style
+        self.transcription_text.tag_configure("no_timestamp_tag_style", foreground=self.timestamp_fg_color, font=self.text_area_italic_font)
         self.transcription_text.tag_configure("active_text_highlight", foreground=self.active_highlight_fg, background=self.active_highlight_bg)
-        self.transcription_text.tag_configure("inactive_text_default", foreground=self.text_area_fg_color, background=self.text_area_bg_color)
+        self.transcription_text.tag_configure("inactive_text_default", foreground=self.text_area_fg_color, background=self.text_area_bg_color) # Already uses base colors
         self.transcription_text.tag_configure("editing_active_segment_text", background=self.editing_segment_bg_color)
         logger.debug("Text area tags configured.")
 
