@@ -159,7 +159,7 @@ class CorrectionWindow:
 
         self.context_menu = tk.Menu(self.transcription_text, tearoff=0)
         self.context_menu.add_command(label="Edit Segment Text", command=self._edit_segment_text_action_from_menu)
-        self.context_menu.add_command(label="Set/Edit Timestamps", command=self._set_segment_timestamps_action_menu, state=tk.DISABLED)
+        self.context_menu.add_command(label="Set/Edit Timestamps", command=self._set_segment_timestamps_action_menu, state=tk.DISABLED) # Initially disabled
         self.context_menu.add_command(label="Remove Segment", command=self._remove_segment_action)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Change Speaker for this Segment", command=self._change_segment_speaker_action_menu)
@@ -281,6 +281,7 @@ class CorrectionWindow:
             
             if not self.audio_player.is_ready():
                 logger.error("Audio player failed to initialize after file selection.")
+                # Error message should be handled by on_error_callback of AudioPlayer
                 return 
 
             self.audio_player_update_queue = self.audio_player.get_update_queue()
@@ -289,23 +290,24 @@ class CorrectionWindow:
                 self.audio_progress_bar.config(to=self.audio_player.total_frames / self.audio_player.frame_rate)
                 self._update_audio_progress_bar(self.audio_player.current_frame / self.audio_player.frame_rate)
             else: 
-                self.audio_progress_bar.config(to=100) 
+                self.audio_progress_bar.config(to=100) # Fallback if frame rate is invalid
                 self._update_audio_progress_bar(0)
             self._update_time_labels(self.audio_player.current_frame) 
 
+            # Enable audio controls
             for btn in [self.play_pause_button, self.rewind_button, self.forward_button]: btn.config(state=tk.NORMAL)
             self.save_changes_button.config(state=tk.NORMAL) 
-            self.play_pause_button.config(text="Play")
+            self.play_pause_button.config(text="Play") # Reset to "Play"
             self.audio_progress_bar.config(state=tk.NORMAL)
             self.assign_speakers_button.config(state=tk.NORMAL if self.segments else tk.DISABLED)
-            self.load_files_button.config(text="Reload Files") 
+            self.load_files_button.config(text="Reload Files") # Change button text
             logger.info("Files loaded successfully into Correction Window.")
             
         except Exception as e: 
             logger.exception("Error during _load_files operation in CorrectionWindow.")
             messagebox.showerror("Load Error", f"An unexpected error occurred during file loading: {e}", parent=self.window)
             if hasattr(self, 'transcription_text') and self.transcription_text is not None:
-                 self.transcription_text.config(state=tk.DISABLED)
+                 self.transcription_text.config(state=tk.DISABLED) # Ensure text area is disabled on error
             self._disable_audio_controls()
 
     def _parse_transcription_text_to_segments(self, text_lines: list[str]) -> bool:
@@ -316,11 +318,12 @@ class CorrectionWindow:
         
         for i, line_content_raw in enumerate(text_lines):
             line_content = line_content_raw.strip()
-            if not line_content: continue 
+            if not line_content: continue # Skip empty lines
 
-            start_time_s, end_time_s = 0.0, 0.0
-            speaker_raw = constants.NO_SPEAKER_LABEL 
-            text_content = line_content 
+            # Default values for each segment
+            start_time_s, end_time_s = 0.0, 0.0 # Default if no timestamps
+            speaker_raw = constants.NO_SPEAKER_LABEL # Default if no speaker
+            text_content = line_content # Initially assume whole line is text
             has_timestamps_in_line = False
 
             # Try matching patterns in order of specificity
@@ -338,31 +341,31 @@ class CorrectionWindow:
                     text_content = txt_match.strip()
                     has_timestamps_in_line = True
                     logger.debug(f"Line {i+1} parsed as TS+Speaker: Start={start_time_s:.3f}, End={end_time_s:.3f}, Spk='{speaker_raw}', Txt='{text_content[:20]}...'")
-                else: # Malformed TS with speaker, treat as Speaker_Only
-                    speaker_raw = spk_match.strip() 
-                    text_content = txt_match.strip() 
-                    has_timestamps_in_line = False
+                else: # Malformed TS with speaker, treat as Speaker_Only (but keep original speaker and text)
+                    speaker_raw = spk_match.strip() # Keep speaker
+                    text_content = txt_match.strip() # Keep text after speaker
+                    has_timestamps_in_line = False # Timestamps are invalid
                     malformed_count +=1
                     logger.warning(f"Line {i+1} matched TS+Speaker but TS invalid. Treating as Speaker_Only. Spk='{speaker_raw}', Txt='{text_content[:30]}...'")
             
-            elif match_ts_only: 
+            elif match_ts_only: # No speaker, but timestamps are present
                 start_str, end_str, txt_match = match_ts_only.groups()
                 parsed_start_s = self._time_str_to_seconds(start_str)
                 parsed_end_s = self._time_str_to_seconds(end_str)
                 if parsed_start_s is not None and parsed_end_s is not None and parsed_start_s < parsed_end_s:
                     start_time_s, end_time_s = parsed_start_s, parsed_end_s
-                    speaker_raw = constants.NO_SPEAKER_LABEL 
+                    speaker_raw = constants.NO_SPEAKER_LABEL # No speaker in this pattern
                     text_content = txt_match.strip()
                     has_timestamps_in_line = True
                     logger.debug(f"Line {i+1} parsed as TS_Only: Start={start_time_s:.3f}, End={end_time_s:.3f}, Txt='{text_content[:20]}...'")
-                else: 
+                else: # Malformed TS, treat as Text_Only (whole line is text)
                     speaker_raw = constants.NO_SPEAKER_LABEL
-                    text_content = line_content 
+                    text_content = line_content # Reset to full line content
                     has_timestamps_in_line = False
                     malformed_count +=1
                     logger.warning(f"Line {i+1} matched TS_Only pattern but TS invalid. Treating as Text_Only. Txt='{text_content[:30]}...'")
 
-            elif match_speaker_only: 
+            elif match_speaker_only: # No timestamps, but speaker is present
                 spk_match, txt_match = match_speaker_only.groups()
                 speaker_raw = spk_match.strip()
                 text_content = txt_match.strip()
@@ -375,40 +378,41 @@ class CorrectionWindow:
                 has_timestamps_in_line = False # Timestamps remain 0.0
                 logger.debug(f"Line {i+1} parsed as Text_Only: Txt='{text_content[:20]}...'")
 
+            # Create segment object
             try:
-                text_tag_id = f"text_content_{id_counter}"
+                text_tag_id = f"text_content_{id_counter}" # Unique tag for the text part of this segment
                 segment = {
                     "id": f"seg_{id_counter}",
                     "start_time": start_time_s,
                     "end_time": end_time_s,
-                    "speaker_raw": speaker_raw, 
+                    "speaker_raw": speaker_raw, # Store the raw speaker label
                     "text": text_content,
                     "original_line_num": i + 1,
-                    "text_tag_id": text_tag_id,
-                    "has_timestamps": has_timestamps_in_line 
+                    "text_tag_id": text_tag_id, # Store the text tag ID
+                    "has_timestamps": has_timestamps_in_line # Store if original line had valid TS
                 }
                 
                 self.segments.append(segment)
-                if speaker_raw != constants.NO_SPEAKER_LABEL: 
+                if speaker_raw != constants.NO_SPEAKER_LABEL: # Add to unique labels if not the internal "none"
                     self.unique_speaker_labels.add(segment['speaker_raw'])
                 id_counter += 1
-            except Exception as ex: 
+            except Exception as ex: # Catch any error during segment object creation
                  logger.exception(f"Unexpected error creating segment object on line {i+1}: '{line_content}'")
                  malformed_count += 1
         
-        if not self.segments and any(l.strip() for l in text_lines): 
+        if not self.segments and any(l.strip() for l in text_lines): # If no segments were created but there was text
             logger.error("Parsing failed: No valid segments could be parsed from the transcription file although it contained text.")
-            return False 
+            return False # Indicate failure
         
-        if malformed_count > 0 and self.segments: 
+        if malformed_count > 0 and self.segments: # If some lines were malformed but others were okay
              messagebox.showwarning("Parsing Issues", f"{malformed_count} line(s) in the transcription file could not be parsed correctly or had malformed timestamps that were ignored. Check logs for details.", parent=self.window)
         
-        return True 
+        return True # Indicate success or partial success
 
 
     def _render_segments_to_text_area(self):
-        if self.edit_mode_active: 
-            self._exit_edit_mode(save_changes=False) 
+        if self.edit_mode_active: # If in edit mode, exit it first (without saving changes to current edit)
+            self._exit_edit_mode(save_changes=False) # Don't save changes from active edit when re-rendering all
 
         if not hasattr(self, 'transcription_text') or self.transcription_text is None:
             logger.critical("CRITICAL: _render_segments_to_text_area called but self.transcription_text is not defined or is None!")
@@ -417,7 +421,7 @@ class CorrectionWindow:
 
         self.transcription_text.config(state=tk.NORMAL)
         self.transcription_text.delete("1.0", tk.END)
-        self.currently_highlighted_text_seg_id = None 
+        self.currently_highlighted_text_seg_id = None # Reset highlight
         
         if not self.segments:
             self.transcription_text.insert(tk.END, "No transcription data loaded or all lines were unparsable.\nPlease load a valid transcription and audio file.")
@@ -425,25 +429,27 @@ class CorrectionWindow:
             return
         
         for idx, seg in enumerate(self.segments):
+            # Ensure segment has all required keys before proceeding
             required_keys = ["id", "start_time", "end_time", "speaker_raw", "text", "text_tag_id", "has_timestamps"]
             if not all(key in seg for key in required_keys):
                 logger.warning(f"Segment at index {idx} is malformed (missing keys), skipping rendering: {seg.get('id', 'Unknown ID')}")
                 continue
             
-            line_start_index = self.transcription_text.index(tk.END + "-1c linestart") 
+            line_start_index = self.transcription_text.index(tk.END + "-1c linestart") # Start of the current line being inserted
             
             seg_has_ts = seg.get("has_timestamps", False)
             seg_has_speaker = seg['speaker_raw'] != constants.NO_SPEAKER_LABEL
+            # Get display speaker name: from speaker_map if available, else raw_label. Empty if no speaker.
             display_speaker = self.speaker_map.get(seg['speaker_raw'], seg['speaker_raw']) if seg_has_speaker else ""
             
             # Merge symbol '+' logic
             prefix_text, merge_tag_tuple = "  ", () # Default leading spaces for alignment
-            if idx > 0:
+            if idx > 0: # Not the first segment
                 prev_seg = self.segments[idx-1]
                 prev_seg_has_speaker = prev_seg.get("speaker_raw") != constants.NO_SPEAKER_LABEL
                 # Add merge symbol if both current and previous have actual speaker labels and they match
                 if seg_has_speaker and prev_seg_has_speaker and prev_seg.get("speaker_raw") == seg["speaker_raw"]:
-                    prefix_text, merge_tag_tuple = "+ ", ("merge_tag_style", seg['id']) 
+                    prefix_text, merge_tag_tuple = "+ ", ("merge_tag_style", seg['id']) # Tag with current segment's ID
             
             # If only text (both TS and Speaker disabled), no prefix, no merge symbol.
             if not seg_has_ts and not seg_has_speaker:
@@ -465,49 +471,56 @@ class CorrectionWindow:
                 speaker_tag_start = self.transcription_text.index(tk.END)
                 self.transcription_text.insert(tk.END, display_speaker, ("speaker_tag_style", seg['id']))
                 speaker_tag_end = self.transcription_text.index(tk.END)
+                # Add a more specific tag for this speaker instance for potential targeted updates
                 self.transcription_text.tag_add(f"speaker_{seg['id']}", speaker_tag_start, speaker_tag_end)
                 self.transcription_text.insert(tk.END, ": ")
             
             # Text content rendering
             text_content_start_index = self.transcription_text.index(tk.END)
-            self.transcription_text.insert(tk.END, seg['text'], ("inactive_text_default", seg["text_tag_id"]))
+            self.transcription_text.insert(tk.END, seg['text'], ("inactive_text_default", seg["text_tag_id"])) # Apply default style and unique text tag
             
             self.transcription_text.insert(tk.END, "\n")
-            line_end_index = self.transcription_text.index(tk.END + "-1c lineend") 
+            line_end_index = self.transcription_text.index(tk.END + "-1c lineend") # End of the current line
             
+            # Tag the entire line (including prefix, TS, speaker, text) with the segment's ID for context menu
             self.transcription_text.tag_add(seg['id'], line_start_index, line_end_index)
             
         self.transcription_text.config(state=tk.DISABLED)
 
 
     def _toggle_ui_for_edit_mode(self, disable: bool):
+        """Enable/disable UI elements when entering/exiting text edit mode."""
         new_state = tk.DISABLED if disable else tk.NORMAL
         
+        # Disable/Enable file operations and global actions
         self.browse_transcription_button.config(state=new_state)
         self.browse_audio_button.config(state=new_state)
         self.load_files_button.config(state=new_state)
+        # Assign speakers button should only be normal if not disabling AND segments exist
         self.assign_speakers_button.config(state=new_state if not disable and self.segments else tk.DISABLED)
         self.save_changes_button.config(state=new_state)
 
-        is_segment_sel = bool(self.right_clicked_segment_id) and not disable
+        # Update context menu item states based on whether a segment is selected (for enabling)
+        # or if we are disabling everything.
+        is_segment_sel = bool(self.right_clicked_segment_id) and not disable # Only relevant if enabling
         
-        if disable: 
+        if disable: # When entering edit mode, disable all context menu items initially
             self.context_menu.entryconfig("Edit Segment Text", state=tk.DISABLED)
             self.context_menu.entryconfig("Set/Edit Timestamps", state=tk.DISABLED)
             self.context_menu.entryconfig("Remove Segment", state=tk.DISABLED)
             self.context_menu.entryconfig("Change Speaker for this Segment", state=tk.DISABLED)
-        else: 
+        else: # When exiting edit mode, re-enable context menu items based on selection status
             self.context_menu.entryconfig("Edit Segment Text", state=tk.NORMAL if is_segment_sel else tk.DISABLED)
-            self.context_menu.entryconfig("Set/Edit Timestamps", state=tk.NORMAL if is_segment_sel else tk.DISABLED) 
+            self.context_menu.entryconfig("Set/Edit Timestamps", state=tk.NORMAL if is_segment_sel else tk.DISABLED) # Enable if segment selected
             self.context_menu.entryconfig("Remove Segment", state=tk.NORMAL if is_segment_sel else tk.DISABLED)
             self.context_menu.entryconfig("Change Speaker for this Segment", state=tk.NORMAL if is_segment_sel else tk.DISABLED)
 
 
     def _enter_edit_mode(self, segment_id_to_edit: str):
         if self.edit_mode_active and self.editing_segment_id == segment_id_to_edit:
-            return 
-        if self.edit_mode_active: 
-            self._exit_edit_mode(save_changes=True) 
+            return # Already editing this segment
+        if self.edit_mode_active: # Editing a different segment, exit that first
+            self._exit_edit_mode(save_changes=True) # Save changes from previous edit
 
         target_segment = next((s for s in self.segments if s["id"] == segment_id_to_edit), None)
         if not target_segment:
@@ -517,33 +530,35 @@ class CorrectionWindow:
         self.edit_mode_active = True
         self.editing_segment_id = segment_id_to_edit
         
-        self.transcription_text.config(state=tk.NORMAL) 
-        self._toggle_ui_for_edit_mode(disable=True) 
+        self.transcription_text.config(state=tk.NORMAL) # Make text area editable
+        self._toggle_ui_for_edit_mode(disable=True) # Disable other UI elements
         
-        text_content_tag_id = target_segment["text_tag_id"] 
+        text_content_tag_id = target_segment["text_tag_id"] # The unique tag for just the text part
         try:
             ranges = self.transcription_text.tag_ranges(text_content_tag_id)
             if ranges:
                 self.editing_segment_text_start_index = ranges[0]
                 
-                self.transcription_text.tag_remove("inactive_text_default", self.editing_segment_text_start_index, ranges[1]) 
-                self.transcription_text.tag_add("editing_active_segment_text", self.editing_segment_text_start_index, ranges[1]) 
+                # Change background of the text being edited
+                self.transcription_text.tag_remove("inactive_text_default", self.editing_segment_text_start_index, ranges[1]) # Remove default style
+                self.transcription_text.tag_add("editing_active_segment_text", self.editing_segment_text_start_index, ranges[1]) # Apply editing style
                 
                 self.transcription_text.focus_set()
-                self.transcription_text.mark_set(tk.INSERT, self.editing_segment_text_start_index)
-                self.transcription_text.see(self.editing_segment_text_start_index)
+                self.transcription_text.mark_set(tk.INSERT, self.editing_segment_text_start_index) # Place cursor at start
+                self.transcription_text.see(self.editing_segment_text_start_index) # Scroll to view
             else:
                 logger.error(f"Could not find text tag ranges for '{text_content_tag_id}' to start editing.")
-                self._exit_edit_mode(save_changes=False); return 
+                self._exit_edit_mode(save_changes=False); return # Exit if tag not found
 
         except tk.TclError:
             logger.exception(f"TclError applying editing tag for '{text_content_tag_id}'")
             self._exit_edit_mode(save_changes=False); return
 
-        if target_segment.get("has_timestamps", False): 
+        # Show jump button if segment has timestamps
+        if target_segment.get("has_timestamps", False): # Check if segment has valid timestamps
             self.jump_to_segment_button.pack(side=tk.LEFT, padx=(5,0), before=self.audio_progress_bar)
         else:
-            self.jump_to_segment_button.pack_forget()
+            self.jump_to_segment_button.pack_forget() # Hide if no timestamps
 
         logger.info(f"Entered edit mode for segment: {self.editing_segment_id} (text tag: {text_content_tag_id})")
 
@@ -562,6 +577,7 @@ class CorrectionWindow:
             try:
                 current_ranges = self.transcription_text.tag_ranges(text_content_tag_id)
                 if current_ranges:
+                    # Revert styling from editing to inactive/default
                     self.transcription_text.tag_remove("editing_active_segment_text", current_ranges[0], current_ranges[1])
                     self.transcription_text.tag_add("inactive_text_default", current_ranges[0], current_ranges[1])
 
@@ -569,11 +585,11 @@ class CorrectionWindow:
                         modified_text = self.transcription_text.get(current_ranges[0], current_ranges[1]).strip()
                         if original_segment["text"] != modified_text:
                             original_segment["text"] = modified_text
-                            text_updated_needs_rerender = True 
+                            text_updated_needs_rerender = True # Mark for re-render if text changed
                             logger.info(f"Segment {self.editing_segment_id} updated text to: '{modified_text[:50]}...'")
                         else:
                             logger.info(f"Segment {self.editing_segment_id} text unchanged.")
-                else: 
+                else: # Should not happen if entered edit mode correctly
                     logger.warning(f"Could not find ranges for tag {text_content_tag_id} on exiting edit mode.")
 
             except tk.TclError:
@@ -581,26 +597,26 @@ class CorrectionWindow:
             except Exception as e:
                 logger.exception(f"Error retrieving or updating segment text for {self.editing_segment_id}")
         
-        self.jump_to_segment_button.pack_forget() 
-        self.transcription_text.config(state=tk.DISABLED) 
-        self._toggle_ui_for_edit_mode(disable=False) 
+        self.jump_to_segment_button.pack_forget() # Always hide jump button on exit
+        self.transcription_text.config(state=tk.DISABLED) # Make text area read-only again
+        self._toggle_ui_for_edit_mode(disable=False) # Re-enable other UI elements
         
         self.edit_mode_active = False
         self.editing_segment_id = None
         self.editing_segment_text_start_index = None
         
-        if text_updated_needs_rerender : 
-             self._render_segments_to_text_area() 
+        if text_updated_needs_rerender : # If text was changed, re-render all segments
+             self._render_segments_to_text_area() # This will apply all formatting again
 
 
     def _handle_click_during_edit_mode(self, event):
         if not self.edit_mode_active or not self.editing_segment_id:
-            return 
+            return # Not in edit mode
 
         clicked_index_str = self.transcription_text.index(f"@{event.x},{event.y}")
         
         editing_seg = next((s for s in self.segments if s["id"] == self.editing_segment_id), None)
-        if not editing_seg:
+        if not editing_seg: # Should not happen
             self._exit_edit_mode(save_changes=False); return 
 
         text_content_tag_id = editing_seg["text_tag_id"]
@@ -608,44 +624,48 @@ class CorrectionWindow:
             tag_ranges = self.transcription_text.tag_ranges(text_content_tag_id)
             if tag_ranges:
                 start_idx, end_idx = tag_ranges[0], tag_ranges[1]
+                # Check if click is within the currently editable text area
                 if self.transcription_text.compare(clicked_index_str, ">=", start_idx) and \
                    self.transcription_text.compare(clicked_index_str, "<", end_idx):
+                    # Click is inside the editable text, allow normal Tkinter text widget behavior
                     return 
             
+            # If click is outside the editable text area for the current segment, exit edit mode
             logger.debug("Clicked outside editable text area during edit mode. Saving and exiting.")
-            self._exit_edit_mode(save_changes=True)
+            self._exit_edit_mode(save_changes=True) # Save changes and exit
 
-        except tk.TclError: 
+        except tk.TclError: # Should not happen with valid tag_id
             logger.warning(f"TclError checking click for tag {text_content_tag_id}, exiting edit mode.")
             self._exit_edit_mode(save_changes=False)
         except Exception as e:
             logger.exception(f"Error in _handle_click_during_edit_mode: {e}")
-            self._exit_edit_mode(save_changes=False)
+            self._exit_edit_mode(save_changes=False) # Exit without saving on unexpected error
 
 
     def _double_click_edit_action(self, event):
-        if self.edit_mode_active: 
+        if self.edit_mode_active: # If already editing, double click might be for selection, let it pass
             return 
 
         text_index = self.transcription_text.index(f"@{event.x},{event.y}")
-        segment_id = self._get_segment_id_from_text_index(text_index) 
+        segment_id = self._get_segment_id_from_text_index(text_index) # Find which segment was clicked
         if segment_id:
             logger.info(f"Double-clicked on segment: {segment_id}. Entering edit mode.")
             self._enter_edit_mode(segment_id)
-            return "break" 
+            return "break" # Prevent further processing of the double click
 
 
     def _edit_segment_text_action_from_menu(self):
-        if not self.right_clicked_segment_id: return 
+        if not self.right_clicked_segment_id: return # No segment selected from context menu
         
+        # If already editing this segment, do nothing. If editing another, exit that first.
         if self.edit_mode_active and self.editing_segment_id == self.right_clicked_segment_id:
             return 
         elif self.edit_mode_active:
-             self._exit_edit_mode(save_changes=True)
+             self._exit_edit_mode(save_changes=True) # Save changes from previous edit
 
         logger.info(f"Context menu 'Edit Segment Text' for: {self.right_clicked_segment_id}")
         self._enter_edit_mode(self.right_clicked_segment_id)
-        self.right_clicked_segment_id = None 
+        self.right_clicked_segment_id = None # Clear after action
 
 
     def _set_segment_timestamps_action_menu(self):
@@ -662,7 +682,7 @@ class CorrectionWindow:
         logger.info(f"Context menu 'Set/Edit Timestamps' for segment: {segment['id']}")
 
         dialog = tk.Toplevel(self.window)
-        dialog.title(f"Set Timestamps for Segment {segment['id']}")
+        dialog.title(f"Set Timestamps for Segment") # Simplified title
         dialog.transient(self.window)
         dialog.grab_set()
         dialog.resizable(False, False)
@@ -702,9 +722,9 @@ class CorrectionWindow:
             
             segment['start_time'] = new_start_s
             segment['end_time'] = new_end_s
-            segment['has_timestamps'] = True 
+            segment['has_timestamps'] = True # Mark that it now has (potentially new) timestamps
             logger.info(f"Timestamps updated for segment {segment['id']}: Start={new_start_s:.3f}, End={new_end_s:.3f}")
-            self._render_segments_to_text_area()
+            self._render_segments_to_text_area() # Re-render to show changes
             dialog.destroy()
 
         ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.LEFT, padx=5)
@@ -713,6 +733,7 @@ class CorrectionWindow:
         start_time_entry.focus_set()
         start_time_entry.selection_range(0, tk.END)
 
+        # Center dialog
         dialog.update_idletasks()
         parent_x = self.window.winfo_rootx()
         parent_y = self.window.winfo_rooty()
@@ -724,7 +745,7 @@ class CorrectionWindow:
         y = parent_y + (parent_height - dialog_height) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        self.right_clicked_segment_id = None 
+        self.right_clicked_segment_id = None # Clear after action
         dialog.wait_window()
 
 
@@ -738,68 +759,72 @@ class CorrectionWindow:
             logger.warning("Cannot jump: Segment data missing or audio player not ready.")
             return
         
-        if not segment.get("has_timestamps", False):
+        if not segment.get("has_timestamps", False): # Check if it has valid timestamps
             logger.warning(f"Cannot jump: Segment {self.editing_segment_id} has no real timestamps.")
             messagebox.showwarning("Playback Warning", "Cannot jump to segment start as this segment was loaded without original timestamps or they were removed.", parent=self.window)
             return
 
-        target_time_secs = max(0, segment["start_time"] - 1.0) 
+        target_time_secs = max(0, segment["start_time"] - 1.0) # Jump to 1 sec before start
         
         if self.audio_player.frame_rate > 0:
             target_frame = int(target_time_secs * self.audio_player.frame_rate)
-            self.audio_player.set_pos_frames(target_frame) 
+            self.audio_player.set_pos_frames(target_frame) # This will trigger queue update for progress
             logger.info(f"Jump requested to {target_time_secs:.3f}s for segment {self.editing_segment_id}")
         else:
             logger.warning("Cannot jump, audio player frame rate is invalid or player not fully ready.")
 
 
     def _open_assign_speakers_dialog(self):
-        if self.edit_mode_active: 
+        if self.edit_mode_active:
             messagebox.showwarning("Action Blocked", "Please exit text edit mode first.", parent=self.window)
             return
-        
-        if not self.segments: 
+
+        if not self.segments:
             messagebox.showinfo("Assign Speakers", "No segments loaded. Please load files first.", parent=self.window)
             return
 
         dialog = tk.Toplevel(self.window)
         dialog.title("Assign Speaker Names")
         dialog.transient(self.window)
-        dialog.grab_set() 
+        dialog.grab_set()
 
-        entries = {}
+        entries = {} # To store Entry widgets for existing speakers
         main_frame = ttk.Frame(dialog, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
-        
-        ttk.Label(main_frame, text="Assign custom names to raw speaker labels:").pack(anchor="w", pady=(0,5))
-        
+
+        ttk.Label(main_frame, text="Assign custom names to raw speaker labels or add new speakers:").pack(anchor="w", pady=(0,5))
+
+        # Frame for scrollable content
         canvas_frame = ttk.Frame(main_frame)
         canvas_frame.pack(fill=tk.BOTH, expand=True)
 
         canvas = tk.Canvas(canvas_frame, highlightthickness=0)
         scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
-        inner_frame = ttk.Frame(canvas) 
+        inner_frame = ttk.Frame(canvas) # Frame to hold the speaker entries
 
         inner_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"), width=e.width))
-        canvas.create_window((0,0), window=inner_frame, anchor="nw") 
+        canvas.create_window((0,0), window=inner_frame, anchor="nw") # Place inner_frame in canvas
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Mousewheel scrolling for the dialog
         def _on_mousewheel_dialog(event): 
             scroll_val = -1*(event.delta // 120) 
             canvas.yview_scroll(scroll_val, "units")
         
         dialog.bind_all("<MouseWheel>", _on_mousewheel_dialog) 
 
+        # --- Section for adding a new speaker ---
         add_new_speaker_frame = ttk.Frame(inner_frame) 
         add_new_speaker_frame.pack(fill=tk.X, pady=(5,10), padx=5)
-        # Changed label for adding new speaker
-        ttk.Label(add_new_speaker_frame, text="Add New Speaker (Raw ID):").pack(side=tk.LEFT, padx=(0,2))
+        
+        ttk.Label(add_new_speaker_frame, text="Add New Speaker:").pack(side=tk.LEFT, padx=(0,2))
         new_raw_id_var = tk.StringVar()
         new_raw_id_entry = ttk.Entry(add_new_speaker_frame, textvariable=new_raw_id_var, width=15)
         new_raw_id_entry.pack(side=tk.LEFT, padx=2)
+        
         ttk.Label(add_new_speaker_frame, text="Display Name:").pack(side=tk.LEFT, padx=(5,2))
         new_display_name_var = tk.StringVar()
         new_display_name_entry = ttk.Entry(add_new_speaker_frame, textvariable=new_display_name_var, width=15)
@@ -808,11 +833,11 @@ class CorrectionWindow:
         ttk.Separator(inner_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
         
         if not self.unique_speaker_labels:
-             ttk.Label(inner_frame, text="No speaker labels found in the current transcription to map.").pack(pady=10)
+             ttk.Label(inner_frame, text="No existing speaker labels found to map. You can add new ones above.").pack(pady=10)
 
         for i, raw_label in enumerate(sorted(list(self.unique_speaker_labels))):
             row_frame = ttk.Frame(inner_frame) 
-            row_frame.pack(fill=tk.X, expand=True, padx=5)
+            row_frame.pack(fill=tk.X, expand=True, padx=5) 
             ttk.Label(row_frame, text=f"{raw_label}:", width=20).pack(side=tk.LEFT, padx=5, pady=3) 
             entry = ttk.Entry(row_frame) 
             entry.insert(0, self.speaker_map.get(raw_label, "")) 
@@ -820,7 +845,7 @@ class CorrectionWindow:
             entries[raw_label] = entry
         
         btn_frame = ttk.Frame(main_frame) 
-        btn_frame.pack(fill=tk.X, pady=(10,0))
+        btn_frame.pack(fill=tk.X, pady=(10,0), side=tk.BOTTOM) 
         
         def on_save_dialog():
             for raw_label, entry_widget in entries.items():
@@ -832,12 +857,12 @@ class CorrectionWindow:
             
             new_raw_id = new_raw_id_var.get().strip()
             new_display_name = new_display_name_var.get().strip()
-            if new_raw_id:
+            if new_raw_id: 
                 if new_raw_id not in self.unique_speaker_labels:
-                    self.unique_speaker_labels.add(new_raw_id)
+                    self.unique_speaker_labels.add(new_raw_id) 
                     logger.info(f"New raw speaker ID '{new_raw_id}' added to unique labels.")
                 
-                if new_display_name:
+                if new_display_name: 
                     self.speaker_map[new_raw_id] = new_display_name
                     logger.info(f"Mapping for '{new_raw_id}' set to '{new_display_name}'.")
                 elif new_raw_id in self.speaker_map and not new_display_name: 
@@ -850,29 +875,33 @@ class CorrectionWindow:
             dialog.destroy()
         
         def on_cancel_dialog():
-            dialog.unbind_all("<MouseWheel>")
+            dialog.unbind_all("<MouseWheel>") 
             dialog.destroy()
 
-        # Ensure Save and Cancel buttons are created and packed
-        ttk.Button(btn_frame, text="Save", command=on_save_dialog).pack(side=tk.RIGHT, padx=5) 
-        ttk.Button(btn_frame, text="Cancel", command=on_cancel_dialog).pack(side=tk.RIGHT) 
+        save_button = ttk.Button(btn_frame, text="Save", command=on_save_dialog)
+        save_button.pack(side=tk.RIGHT, padx=5) 
+        cancel_button = ttk.Button(btn_frame, text="Cancel", command=on_cancel_dialog)
+        cancel_button.pack(side=tk.RIGHT) 
         
         dialog.update_idletasks() 
         
-        min_width = 450 
-        num_speakers_display = len(self.unique_speaker_labels) if self.unique_speaker_labels else 1 
+        # MODIFIED: Increased default/minimum width for the dialog
+        min_width = 580  # New default and minimum width
+        
+        num_speakers_display = len(self.unique_speaker_labels) if self.unique_speaker_labels else 0 
         header_height = 50 
-        add_new_speaker_row_height = 40
+        add_new_speaker_row_height = 40 
         entry_row_height = 35 
-        buttons_height = 50
+        buttons_height = 50 
         padding_height = 20
         
         estimated_content_height = add_new_speaker_row_height + (num_speakers_display * entry_row_height)
         desired_height = header_height + estimated_content_height + buttons_height + padding_height
         
-        max_dialog_height = int(self.window.winfo_height() * 0.8)
-        dialog_height = max(250, min(int(desired_height), max_dialog_height)) 
-        dialog_width = min_width
+        max_dialog_height = int(self.window.winfo_height() * 0.8) 
+        dialog_height = max(350, min(int(desired_height), max_dialog_height)) 
+        
+        dialog_width = min_width # Use the new min_width as the initial width
 
         dialog.minsize(min_width, 200) 
         dialog.geometry(f"{dialog_width}x{dialog_height}")
@@ -888,7 +917,7 @@ class CorrectionWindow:
 
         center_x = parent_x + (parent_width // 2) - (d_width // 2)
         center_y = parent_y + (parent_height // 2) - (d_height // 2)
-        dialog.geometry(f"+{max(0,center_x)}+{max(0,center_y)}")
+        dialog.geometry(f"+{max(0,center_x)}+{max(0,center_y)}") 
         
         dialog.lift() 
         new_raw_id_entry.focus_set() 
@@ -896,6 +925,7 @@ class CorrectionWindow:
 
 
     def _get_segment_id_from_text_index(self, text_index_str: str) -> str | None:
+        """Helper to find a segment ID tag at a given text index."""
         tags_at_index = self.transcription_text.tag_names(text_index_str)
         for tag in tags_at_index:
             if tag.startswith("seg_") and tag.count('_') == 1: 
@@ -961,7 +991,7 @@ class CorrectionWindow:
                 speaker_choices[raw_label] = raw_label 
         
         if constants.NO_SPEAKER_LABEL not in speaker_choices:
-             speaker_choices[constants.NO_SPEAKER_LABEL] = "(No Speaker)"
+             speaker_choices[constants.NO_SPEAKER_LABEL] = "(No Speaker)" 
 
         if not speaker_choices: 
             messagebox.showinfo("Change Speaker", "No speaker labels (including 'No Speaker') are available to choose from.", parent=self.window)
@@ -990,7 +1020,7 @@ class CorrectionWindow:
             logger.warning("Could not get pointer coordinates for speaker menu, using fallback position.")
             x_root = self.window.winfo_rootx()
             y_root = self.window.winfo_rooty()
-            speaker_menu.tk_popup(x_root + 100, y_root + 100)
+            speaker_menu.tk_popup(x_root + 100, y_root + 100) 
 
 
     def _on_speaker_click(self, event): 
@@ -1074,7 +1104,7 @@ class CorrectionWindow:
 
                     elif msg_type == 'progress':
                         current_frame = message[1]
-                        if self.audio_player and self.audio_player.is_ready():
+                        if self.audio_player and self.audio_player.is_ready(): 
                             self._update_time_labels(current_frame)
                             if self.audio_player.frame_rate > 0:
                                 current_secs = current_frame / self.audio_player.frame_rate
@@ -1090,7 +1120,7 @@ class CorrectionWindow:
                             self.play_pause_button.config(text="Play")
                     elif msg_type == 'finished':
                         if hasattr(self, 'play_pause_button') and self.play_pause_button.winfo_exists():
-                            self.play_pause_button.config(text="Play")
+                            self.play_pause_button.config(text="Play") 
                         if self.audio_player and self.audio_player.is_ready() and self.audio_player.frame_rate > 0:
                             end_pos_secs = self.audio_player.total_frames / self.audio_player.frame_rate
                             self._update_audio_progress_bar(end_pos_secs)
@@ -1100,7 +1130,7 @@ class CorrectionWindow:
                             self.play_pause_button.config(text="Play")
                     elif msg_type == 'error':
                         error_message = message[1]
-                        self._handle_audio_player_error(error_message)
+                        self._handle_audio_player_error(error_message) 
                     self.audio_player_update_queue.task_done()
             except queue.Empty:
                 pass 
@@ -1108,7 +1138,7 @@ class CorrectionWindow:
                 logger.exception("Error processing audio player queue.")
         
         if hasattr(self, 'window') and self.window.winfo_exists(): 
-            self.window.after(50, self._poll_audio_player_queue)
+            self.window.after(50, self._poll_audio_player_queue) 
 
 
     def _toggle_play_pause(self):
@@ -1178,7 +1208,7 @@ class CorrectionWindow:
         if not hasattr(self, 'transcription_text') or self.transcription_text is None: return
 
         newly_highlighted_segment_id = None
-        active_segment_has_real_timestamps = False
+        active_segment_has_real_timestamps = False 
 
         for segment in self.segments:
             if segment.get("has_timestamps", False) and \
@@ -1192,23 +1222,23 @@ class CorrectionWindow:
             if self.currently_highlighted_text_seg_id:
                 old_seg_data = next((s for s in self.segments if s["id"] == self.currently_highlighted_text_seg_id), None)
                 if old_seg_data:
-                    text_tag_to_deactivate = old_seg_data["text_tag_id"]
+                    text_tag_to_deactivate = old_seg_data["text_tag_id"] 
                     try:
                         ranges = self.transcription_text.tag_ranges(text_tag_to_deactivate)
                         if ranges:
                             self.transcription_text.tag_remove("active_text_highlight", ranges[0], ranges[1])
-                            self.transcription_text.tag_add("inactive_text_default", ranges[0], ranges[1])
+                            self.transcription_text.tag_add("inactive_text_default", ranges[0], ranges[1]) 
                     except tk.TclError: pass 
             
             if newly_highlighted_segment_id and active_segment_has_real_timestamps:
                 new_seg_data = next((s for s in self.segments if s["id"] == newly_highlighted_segment_id), None)
                 if new_seg_data:
-                    text_tag_to_activate = new_seg_data["text_tag_id"]
+                    text_tag_to_activate = new_seg_data["text_tag_id"] 
                     try:
                         ranges = self.transcription_text.tag_ranges(text_tag_to_activate)
                         if ranges:
-                            self.transcription_text.tag_remove("inactive_text_default", ranges[0], ranges[1])
-                            self.transcription_text.tag_add("active_text_highlight", ranges[0], ranges[1])
+                            self.transcription_text.tag_remove("inactive_text_default", ranges[0], ranges[1]) 
+                            self.transcription_text.tag_add("active_text_highlight", ranges[0], ranges[1]) 
                             self.transcription_text.see(ranges[0]) 
                     except tk.TclError: pass
             
@@ -1231,28 +1261,20 @@ class CorrectionWindow:
             
             line_parts = []
             seg_has_ts = s.get("has_timestamps", False)
-            seg_has_speaker = s['speaker_raw'] != constants.NO_SPEAKER_LABEL
+            seg_has_output_speaker = s['speaker_raw'] != constants.NO_SPEAKER_LABEL
 
-            if seg_has_ts:
-                line_parts.append(f"[{self._seconds_to_time_str(s['start_time'])} - {self._seconds_to_time_str(s['end_time'])}]")
-
-            if seg_has_speaker:
+            if self.include_timestamps and seg_has_ts: 
+                formatted_time_start = self._seconds_to_time_str(s['start_time'])
+                formatted_time_end = self._seconds_to_time_str(s['end_time'])
+                line_parts.append(f"[{formatted_time_start} - {formatted_time_end}]")
+            
+            if seg_has_output_speaker:
                 speaker_to_save = self.speaker_map.get(s['speaker_raw'], s['speaker_raw'])
-                # Add speaker part, ensuring a space if timestamps were already added
-                speaker_part = f"{speaker_to_save}:"
-                if line_parts: # If timestamps were added
-                    line_parts.append(speaker_part)
-                else: # No timestamps, speaker is first
-                    line_parts.append(speaker_part)
+                line_parts.append(f"{speaker_to_save}:")
             
-            # Add text part, ensuring a space if timestamps or speaker were already added
-            text_part = s['text']
-            if line_parts: # If timestamps or speaker were added
-                 line_parts.append(text_part)
-            else: # Only text
-                 line_parts.append(text_part)
+            line_parts.append(s['text']) 
             
-            content_lines.append(" ".join(line_parts)) # Join with space, will handle cases correctly
+            content_lines.append(" ".join(line_parts))
             
         if not content_lines: 
             messagebox.showwarning("Nothing to Save", "No valid segments found to save after formatting.", parent=self.window)
@@ -1294,11 +1316,12 @@ class CorrectionWindow:
 
 
     def _disable_audio_controls(self):
+        """Disable all audio playback related controls."""
         widgets_to_disable = [
             getattr(self, 'play_pause_button', None), 
             getattr(self, 'rewind_button', None), 
             getattr(self, 'forward_button', None),
-            getattr(self, 'audio_progress_bar', None)
+            getattr(self, 'audio_progress_bar', None) 
         ]
         for widget in widgets_to_disable:
             if widget and hasattr(widget, 'winfo_exists') and widget.winfo_exists():
@@ -1328,11 +1351,11 @@ class CorrectionWindow:
 
         try: 
             if hasattr(self, 'window') and self.window.winfo_exists():
-                 self.window.unbind_all("<MouseWheel>")
+                 self.window.unbind_all("<MouseWheel>") 
         except tk.TclError:
             logger.debug("TclError during unbind_all on close, window might be gone.")
             pass 
 
         logger.debug("CorrectionWindow: Destroying window.")
-        if hasattr(self, 'window') and self.window.winfo_exists():
+        if hasattr(self, 'window') and self.window.winfo_exists(): 
             self.window.destroy()
