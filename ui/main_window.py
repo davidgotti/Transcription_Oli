@@ -42,24 +42,9 @@ class UI:
         self.select_audio_file_callback = select_audio_file_callback
         self.open_correction_window_callback = open_correction_window_callback
 
-        # --- Hugging Face Token Input ---
-        token_frame = ttk.LabelFrame(root, text="Hugging Face API Token (Optional)", padding=(10, 5))
-        token_frame.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-        
-        self.token_label = ttk.Label(token_frame, text="Token:")
-        self.token_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-
-        self.token_entry = ttk.Entry(token_frame, width=50)
-        self.token_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-        self.save_token_button = ttk.Button(token_frame, text="Save Token", command=self.save_token_ui)
-        self.save_token_button.grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        
-        token_frame.columnconfigure(1, weight=1)
-
         # --- Audio File Selection ---
         file_frame = ttk.LabelFrame(root, text="Audio File(s)", padding=(10,5))
-        file_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        file_frame.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky="ew") # Moved to row 0
 
         self.audio_file_label = ttk.Label(file_frame, text="File Path(s):")
         self.audio_file_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -74,12 +59,13 @@ class UI:
         file_frame.columnconfigure(1, weight=1)
 
         # --- Processing Options Frame ---
-        options_outer_frame = ttk.LabelFrame(root, text="Processing Options", padding=(10, 5))
-        options_outer_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew")
-        options_outer_frame.columnconfigure(0, weight=1) # Allow inner frame to expand
+        # This frame will now contain model selection, other checkboxes, AND conditionally the token input
+        self.options_outer_frame = ttk.LabelFrame(root, text="Processing Options", padding=(10, 5))
+        self.options_outer_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew") # Moved to row 1
+        self.options_outer_frame.columnconfigure(0, weight=1) # Allow inner frame to expand
 
         # --- Model Selection ---
-        model_selection_frame = ttk.Frame(options_outer_frame)
+        model_selection_frame = ttk.Frame(self.options_outer_frame)
         model_selection_frame.pack(fill=tk.X, pady=(0,5)) # Use pack for this sub-frame
 
         self.model_label = ttk.Label(model_selection_frame, text="Transcription Model:")
@@ -108,31 +94,64 @@ class UI:
         self.show_model_tooltip() # Show initial tooltip
 
         # --- Other Processing Options (Diarization, Timestamps) ---
-        checkbox_options_frame = ttk.Frame(options_outer_frame)
-        checkbox_options_frame.pack(fill=tk.X, pady=(5,0))
+        self.checkbox_options_frame = ttk.Frame(self.options_outer_frame) # Made it an instance variable for ordering
+        self.checkbox_options_frame.pack(fill=tk.X, pady=(5,0))
 
-        self.enable_diarization_var = tk.BooleanVar(value=True)
-        self.diarization_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Enable Speaker Diarization", variable=self.enable_diarization_var)
+        self.enable_diarization_var = tk.BooleanVar(value=False) # Default to False
+        self.diarization_checkbutton = ttk.Checkbutton(
+            self.checkbox_options_frame,
+            text="Enable Speaker Diarization",
+            variable=self.enable_diarization_var,
+            command=self._toggle_token_input_visibility # ADDED command
+        )
         self.diarization_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
         
         self.include_timestamps_var = tk.BooleanVar(value=True)
-        self.timestamps_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Include Timestamps in Output", 
-                                                      variable=self.include_timestamps_var, command=self._toggle_end_time_option)
+        self.timestamps_checkbutton = ttk.Checkbutton(
+            self.checkbox_options_frame,
+            text="Include Timestamps in Output", 
+            variable=self.include_timestamps_var,
+            command=self._toggle_end_time_option
+        )
         self.timestamps_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
 
-        self.include_end_times_var = tk.BooleanVar(value=False) # Default to False (start time only if timestamps active)
-        self.end_times_checkbutton = ttk.Checkbutton(checkbox_options_frame, text="Include End Times", 
-                                                     variable=self.include_end_times_var, state=tk.DISABLED)
+        self.include_end_times_var = tk.BooleanVar(value=False)
+        self.end_times_checkbutton = ttk.Checkbutton(
+            self.checkbox_options_frame,
+            text="Include End Times", 
+            variable=self.include_end_times_var,
+            state=tk.DISABLED
+        )
         self.end_times_checkbutton.pack(side=tk.LEFT, padx=(0,10), pady=5)
-        self._toggle_end_time_option() # Set initial state
+        self._toggle_end_time_option()
+
+        # --- Hugging Face Token Input (Create but don't place immediately) ---
+        # This frame will be managed by _toggle_token_input_visibility
+        self.token_frame = ttk.LabelFrame(self.options_outer_frame, text="Hugging Face API Token", padding=(10, 5))
+        # No .pack() or .grid() here yet for self.token_frame itself
+
+        self.token_required_label = ttk.Label(self.token_frame, text="(Required for Speaker Diarization)")
+        self.token_required_label.grid(row=0, column=0, columnspan=3, padx=5, pady=(0,5), sticky="w")
+
+        self.token_label = ttk.Label(self.token_frame, text="Token:")
+        self.token_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+
+        self.token_entry = ttk.Entry(self.token_frame, width=50)
+        self.token_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+        self.save_token_button = ttk.Button(self.token_frame, text="Save Token", command=self.save_token_ui)
+        self.save_token_button.grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        
+        self.token_frame.columnconfigure(1, weight=1)
+
 
         # --- Processing Button ---
         self.process_button = ttk.Button(root, text="Start Processing", command=self.start_processing_callback)
-        self.process_button.grid(row=3, column=0, columnspan=3, padx=5, pady=10, sticky="ew")
+        self.process_button.grid(row=2, column=0, columnspan=3, padx=5, pady=10, sticky="ew") # Adjusted row
 
         # --- Progress Bar and Status Label ---
         progress_status_frame = ttk.Frame(root)
-        progress_status_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        progress_status_frame.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="ew") # Adjusted row
 
         self.status_label = ttk.Label(progress_status_frame, text="Status: Idle")
         self.status_label.pack(side=tk.TOP, fill=tk.X, expand=True)
@@ -145,39 +164,55 @@ class UI:
 
         # --- Output Area ---
         self.text_area_font = ('Helvetica', 12)
-        output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5)) #
-        output_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") #
+        output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5))
+        output_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") # Adjusted row
 
         self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD,
                                         font=self.text_area_font,
-                                        background="white",       # <--- ADD THIS LINE
-                                        foreground="black",       # <--- ADD THIS LINE
-                                        insertbackground="black") # <--- ADD THIS (Cursor color)
-        self.output_scrollbar = ttk.Scrollbar(output_frame, orient=tk.VERTICAL, command=self.output_text_area.yview) #
-        self.output_text_area.configure(yscrollcommand=self.output_scrollbar.set) #
+                                        background="white",
+                                        foreground="black",
+                                        insertbackground="black")
+        self.output_scrollbar = ttk.Scrollbar(output_frame, orient=tk.VERTICAL, command=self.output_text_area.yview)
+        self.output_text_area.configure(yscrollcommand=self.output_scrollbar.set)
         
-        self.output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y) #
-        self.output_text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True) #
-        self.output_text_area.config(state=tk.DISABLED) #
+        self.output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.output_text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.output_text_area.config(state=tk.DISABLED)
         
-        output_frame.columnconfigure(0, weight=1) #
-        output_frame.rowconfigure(0, weight=1) #
+        output_frame.columnconfigure(0, weight=1)
+        output_frame.rowconfigure(0, weight=1)
 
         # --- Correction Window Button ---
         self.correction_button = ttk.Button(root, text="Transcript Correction (Last Successful)", command=self.open_correction_window_callback)
-        self.correction_button.grid(row=6, column=0, columnspan=3, padx=5, pady=10, sticky="ew")
+        self.correction_button.grid(row=5, column=0, columnspan=3, padx=5, pady=10, sticky="ew") # Adjusted row
 
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(5, weight=1)
+        root.rowconfigure(4, weight=1) # Adjusted row for output_frame to take weight
 
         self.elements_to_disable_during_processing = [
-            self.browse_button, self.process_button, # audio_file_entry is already disabled for direct input
+            self.browse_button, self.process_button,
             self.token_entry, self.save_token_button, self.correction_button,
             self.diarization_checkbutton, self.timestamps_checkbutton,
             self.model_dropdown, self.end_times_checkbutton
         ]
         self.save_token_callback = None
-        self.model_hover_tooltip = None # For hover tooltip on combobox itself
+        self.model_hover_tooltip = None
+
+        # Call at the end of __init__ to set initial visibility of token frame
+        self._toggle_token_input_visibility()
+
+
+    def _toggle_token_input_visibility(self):
+        """Shows or hides the Hugging Face token input frame based on diarization checkbox."""
+        if self.enable_diarization_var.get():
+            # Place the token frame within the options_outer_frame.
+            # It will appear after the checkbox_options_frame because it's packed later.
+            self.token_frame.pack(fill=tk.X, pady=(5, 10), padx=5, after=self.checkbox_options_frame)
+        else:
+            self.token_frame.pack_forget()
+        # Optional: If you want to force re-layout of the parent if using grid for token_frame
+        # self.options_outer_frame.master.layout() or self.options_outer_frame.update_idletasks()
+
 
     def show_model_tooltip(self, event=None):
         selected_model_key = self.model_var.get()
@@ -185,11 +220,9 @@ class UI:
         self.model_tooltip_label.config(text=tooltip_text)
 
     def show_model_tooltip_on_hover(self, event=None):
-        # This tooltip is for when hovering over the Combobox itself
         selected_model_key = self.model_var.get()
         tooltip_text = self.model_options.get(selected_model_key, "Select a model.")
         
-        # Simple delay to avoid flickering if mouse moves quickly over options
         if hasattr(self, '_tooltip_after_id'):
             self.root.after_cancel(self._tooltip_after_id)
 
@@ -215,7 +248,7 @@ class UI:
             self.end_times_checkbutton.config(state=tk.NORMAL)
         else:
             self.end_times_checkbutton.config(state=tk.DISABLED)
-            self.include_end_times_var.set(False) # Uncheck if parent is unchecked
+            self.include_end_times_var.set(False)
 
     def update_status_and_progress(self, status_text=None, progress_value=None):
         if status_text is not None:
@@ -248,7 +281,6 @@ class UI:
                  element.configure(state=tk.DISABLED)
             elif hasattr(element, 'config'):
                  element.config(state=tk.DISABLED)
-        # self.audio_file_entry is already disabled, no need to touch it here.
 
     def enable_ui_after_processing(self):
         logger.debug("UI: Enabling UI elements after processing.")
@@ -257,9 +289,8 @@ class UI:
                  element.configure(state=tk.NORMAL)
             elif hasattr(element, 'config'):
                  element.config(state=tk.NORMAL)
-        # Special handling for end_times_checkbutton based on timestamps_checkbutton state
         self._toggle_end_time_option()
-        # self.audio_file_entry remains disabled for direct input.
+
 
     def update_audio_file_entry_display(self, file_paths: list):
         self.audio_file_entry.config(state=tk.NORMAL)
@@ -293,11 +324,10 @@ class UI:
                 logger.info("UI: Displayed 'no speech/segments' message.")
                 return
 
-            if not output_file_path: # Should only happen for single file error before save or cancelled save
+            if not output_file_path:
                 msg_to_show = ("No output file path provided to display results. "
                                "Content might have been shown directly if save was cancelled or failed, or an error occurred before saving.")
                 logger.warning(f"UI: {msg_to_show}")
-                # self.update_output_text(msg_to_show) # Avoid overwriting potentially direct error text
                 return
 
             with open(output_file_path, 'r', encoding='utf-8') as f:
