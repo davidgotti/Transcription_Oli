@@ -54,23 +54,21 @@ except Exception as e:
 try:
     pkg_base, pkg_dir = get_package_paths('speechbrain')
     
-    # Handle speechbrain/utils
+# Handle speechbrain/utils
     utils_source_path = os.path.join(pkg_dir, 'utils')
     if os.path.isdir(utils_source_path):
-        datas.append((utils_source_path, 'speechbrain/utils', 'DATA'))
+        datas.append((utils_source_path, 'speechbrain/utils'))
         print(f"Hook-speechbrain: Added speechbrain/utils from {utils_source_path}")
-        datas += collect_data_files('speechbrain.utils', destdir='speechbrain/utils', include_py_files=True, excludes=['**/__pycache__', '*.pyc'])
+        # Removed problematic collect_data_files line for speechbrain.utils
     else:
         print(f"Hook-speechbrain: Critical - Could not find speechbrain/utils directory at {utils_source_path}")
 
     # Handle speechbrain/dataio
     dataio_source_path = os.path.join(pkg_dir, 'dataio')
     if os.path.isdir(dataio_source_path):
-        datas.append((dataio_source_path, 'speechbrain/dataio', 'DATA'))
+        datas.append((dataio_source_path, 'speechbrain/dataio'))
         print(f"Hook-speechbrain: Added speechbrain/dataio from {dataio_source_path}")
-        datas += collect_data_files('speechbrain.dataio', destdir='speechbrain/dataio', include_py_files=True, excludes=['**/__pycache__', '*.pyc'])
-    else:
-        print(f"Hook-speechbrain: Critical - Could not find speechbrain/dataio directory at {dataio_source_path}")
+        # Removed problematic collect_data_files line for speechbrain.dataio
 
     # Add other specific subdirectories if they cause issues later, e.g.:
     # pretrained_models_source_path = os.path.join(pkg_dir, 'pretrained_models')

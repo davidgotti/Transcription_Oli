@@ -1,18 +1,25 @@
 # utils/logging_setup.py
+import os
 import logging
-import os # Added for log directory
 from utils import constants # Assuming constants.py is in the same directory
 
-# Define a log file name and path (e.g., in the project root or a dedicated logs folder)
-LOG_DIRECTORY = "logs" # You can change this to a full path if needed
+# ---- CORRECTED LOG DIRECTORY ----
+APP_NAME = "TranscriptionOli" # Or your app's name
+USER_DATA_DIR = os.path.expanduser(f"~/Library/Application Support/{APP_NAME}")
+LOG_DIRECTORY = os.path.join(USER_DATA_DIR, "logs")
+# ---- END CORRECTION ----
+
 if not os.path.exists(LOG_DIRECTORY):
     try:
-        os.makedirs(LOG_DIRECTORY)
+        os.makedirs(LOG_DIRECTORY) # Creates ~/.Library/Application Support/AppName/logs
     except OSError as e:
-        # Fallback if logs directory can't be created (e.g. permissions)
-        # This will log to the current working directory if LOG_DIRECTORY fails.
-        print(f"Warning: Could not create log directory '{LOG_DIRECTORY}'. Logging to current directory. Error: {e}")
-        LOG_DIRECTORY = "." 
+        # Fallback if user-specific logs directory can't be created (highly unlikely)
+        # This will log to where the app is run from if the above fails.
+        # For a .app bundle, this fallback itself is problematic.
+        print(f"CRITICAL: Could not create user-specific log directory '{LOG_DIRECTORY}'. Logging to fallback. Error: {e}")
+        # A truly robust fallback might be os.path.expanduser("~/Desktop") or similar known writable,
+        # or disable file logging. For now, ensure USER_DATA_DIR works.
+        LOG_DIRECTORY = "." # Problematic fallback for .app
 
 LOG_FILE_PATH = os.path.join(LOG_DIRECTORY, "transcription_app.log")
 

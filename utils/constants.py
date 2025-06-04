@@ -1,5 +1,14 @@
 # utils/constants.py
 import logging
+import os  # <<< ADD THIS IMPORT
+
+# --- User-specific Application Data Directory ---
+# It's good practice to define this once and use it for logs, configs, etc.
+APP_NAME = "TranscriptionOli"  # Or your preferred application name
+
+# For macOS, ~/Library/Application Support/YourAppName is standard
+# os.path.expanduser("~") gets the user's home directory
+APP_USER_DATA_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
 
 # --- Message types for the queue ---
 MSG_TYPE_STATUS = "STATUS_UPDATE"
@@ -17,19 +26,18 @@ STATUS_EMPTY = "EMPTY"
 STATUS_ERROR = "ERROR"
 
 # --- Default output file name ---
-DEFAULT_OUTPUT_TEXT_FILE = "processed_output.txt"
-DEFAULT_CONFIG_FILE = 'config.ini'
+DEFAULT_OUTPUT_TEXT_FILE = "processed_output.txt" # For transcription output, user chooses actual save path
+DEFAULT_CONFIG_FILE = os.path.join(APP_USER_DATA_DIR, 'config.ini')  # <<< CORRECTED TO FULL PATH
 
 # --- Special Labels ---
-# Used internally in CorrectionWindow for segments parsed without explicit speaker info
 NO_SPEAKER_LABEL = "SPEAKER_NONE_INTERNAL"
 
 # --- Logging Configuration ---
+# Ensure LOG_DIRECTORY in logging_setup.py also uses APP_USER_DATA_DIR
+# e.g., LOG_DIRECTORY = os.path.join(APP_USER_DATA_DIR, 'logs')
 LOG_LEVEL_DEBUG = logging.DEBUG
 LOG_LEVEL_INFO = logging.INFO
-# Set the desired log level for the application
-ACTIVE_LOG_LEVEL = LOG_LEVEL_DEBUG # Or LOG_LEVEL_INFO for release
-
+ACTIVE_LOG_LEVEL = LOG_LEVEL_DEBUG
 LOG_FORMAT = '%(asctime)s %(levelname)-8s [%(threadName)s] [%(filename)s:%(lineno)d] %(funcName)s - %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 

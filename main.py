@@ -5,6 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 import queue # Ensure queue is imported
 import logging
 import os
+import multiprocessing
 # import datetime # Not currently used, can be removed if not needed elsewhere
 
 from utils import constants
@@ -550,19 +551,22 @@ class MainApp:
                 self.last_successful_audio_path = original_audio_path 
                 self.ui.update_status_and_progress("Transcription saved!", 100) 
                 self.ui.display_processed_output(chosen_path, False) 
-                messagebox.showinfo("Success", f"Transcription saved to {chosen_path}", parent=self.root) 
+                messagebox.showinfo("Success", f"Transcription saved to {chosen_path}", parent=self.root)
+                self.root.focus_force()
             except Exception as e:
                 err_msg = f"Could not save file: {e}" 
                 logger.exception(err_msg) 
                 self.ui.update_status_and_progress("Save failed.", 100) 
                 self.ui.update_output_text(f"SAVE FAILED: {err_msg}\n\n{'\n'.join(segments_to_save or [])}") 
-                messagebox.showerror("Save Error", err_msg, parent=self.root) 
+                messagebox.showerror("Save Error", err_msg, parent=self.root)
+                self.root.focus_force() 
         else:
             self.last_successful_transcription_path = None 
             self.last_successful_audio_path = None 
             self.ui.update_status_and_progress("Save cancelled by user.", 100) 
             self.ui.update_output_text(f"File not saved. Transcription content:\n\n{'\n'.join(segments_to_save or [])}") 
-            messagebox.showwarning("Save Cancelled", "File not saved. Content shown in output area.", parent=self.root) 
+            messagebox.showwarning("Save Cancelled", "File not saved. Content shown in output area.", parent=self.root)
+            self.root.focus_force() 
 
 
     def _prompt_for_batch_save_directory_and_save(self, all_processed_results: list): 
@@ -697,6 +701,7 @@ class MainApp:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main_app_root = tk.Tk()
 
     main_app_root.geometry("1x1-10000-10000") 
