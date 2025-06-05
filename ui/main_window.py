@@ -59,14 +59,13 @@ class UI:
         file_frame.columnconfigure(1, weight=1)
 
         # --- Processing Options Frame ---
-        # This frame will now contain model selection, other checkboxes, AND conditionally the token input
         self.options_outer_frame = ttk.LabelFrame(root, text="Processing Options", padding=(10, 5))
-        self.options_outer_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew") # Moved to row 1
-        self.options_outer_frame.columnconfigure(0, weight=1) # Allow inner frame to expand
+        self.options_outer_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=(5,0), sticky="ew") 
+        self.options_outer_frame.columnconfigure(0, weight=1) 
 
         # --- Model Selection ---
         model_selection_frame = ttk.Frame(self.options_outer_frame)
-        model_selection_frame.pack(fill=tk.X, pady=(0,5)) # Use pack for this sub-frame
+        model_selection_frame.pack(fill=tk.X, pady=(0,5)) 
 
         self.model_label = ttk.Label(model_selection_frame, text="Transcription Model:")
         self.model_label.pack(side=tk.LEFT, padx=(0,5), pady=5)
@@ -83,7 +82,7 @@ class UI:
         
         self.model_dropdown = ttk.Combobox(model_selection_frame, textvariable=self.model_var, 
                                            values=list(self.model_options.keys()), state="readonly", width=25)
-        self.model_dropdown.set("large (recommended)") # Default selection
+        self.model_dropdown.set("large (recommended)") 
         self.model_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
         self.model_dropdown.bind("<<ComboboxSelected>>", self.show_model_tooltip)
         self.model_dropdown.bind("<Enter>", self.show_model_tooltip_on_hover)
@@ -91,18 +90,18 @@ class UI:
         
         self.model_tooltip_label = ttk.Label(model_selection_frame, text="", wraplength=300, foreground="grey")
         self.model_tooltip_label.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
-        self.show_model_tooltip() # Show initial tooltip
+        self.show_model_tooltip() 
 
-        # --- Other Processing Options (Diarization, Timestamps) ---
-        self.checkbox_options_frame = ttk.Frame(self.options_outer_frame) # Made it an instance variable for ordering
+        # --- Other Processing Options (Diarization, Timestamps, Auto Merge) ---
+        self.checkbox_options_frame = ttk.Frame(self.options_outer_frame) 
         self.checkbox_options_frame.pack(fill=tk.X, pady=(5,0))
 
-        self.enable_diarization_var = tk.BooleanVar(value=False) # Default to False
+        self.enable_diarization_var = tk.BooleanVar(value=False) 
         self.diarization_checkbutton = ttk.Checkbutton(
             self.checkbox_options_frame,
             text="Enable Speaker Diarization",
             variable=self.enable_diarization_var,
-            command=self._toggle_token_input_visibility # ADDED command
+            command=self._update_diarization_dependent_options # UPDATED command
         )
         self.diarization_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
         
@@ -125,8 +124,18 @@ class UI:
         self.end_times_checkbutton.pack(side=tk.LEFT, padx=(0,10), pady=5)
         self._toggle_end_time_option()
 
-        # --- Hugging Face Token Input (Create but don't place immediately) ---
-        # This frame will be managed by _toggle_token_input_visibility
+        # --- NEW: Auto Merge Checkbutton ---
+        self.auto_merge_var = tk.BooleanVar(value=False)
+        self.auto_merge_checkbutton = ttk.Checkbutton(
+            self.checkbox_options_frame,
+            text="Automatically Merge Same Speakers",
+            variable=self.auto_merge_var,
+            state=tk.DISABLED # Initially disabled
+        )
+        self.auto_merge_checkbutton.pack(side=tk.LEFT, padx=10, pady=5)
+        # --- END NEW ---
+
+        # --- Hugging Face Token Input ---
         self.token_frame = ttk.LabelFrame(self.options_outer_frame, text="Hugging Face API Token", padding=(10, 5))
         # No .pack() or .grid() here yet for self.token_frame itself
 
@@ -147,11 +156,11 @@ class UI:
 
         # --- Processing Button ---
         self.process_button = ttk.Button(root, text="Start Processing", command=self.start_processing_callback)
-        self.process_button.grid(row=2, column=0, columnspan=3, padx=5, pady=10, sticky="ew") # Adjusted row
+        self.process_button.grid(row=2, column=0, columnspan=3, padx=5, pady=10, sticky="ew") 
 
         # --- Progress Bar and Status Label ---
         progress_status_frame = ttk.Frame(root)
-        progress_status_frame.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="ew") # Adjusted row
+        progress_status_frame.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="ew") 
 
         self.status_label = ttk.Label(progress_status_frame, text="Status: Idle")
         self.status_label.pack(side=tk.TOP, fill=tk.X, expand=True)
@@ -165,7 +174,7 @@ class UI:
         # --- Output Area ---
         self.text_area_font = ('Helvetica', 12)
         output_frame = ttk.LabelFrame(root, text="Processed Output (Last File / Summary)", padding=(10,5))
-        output_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") # Adjusted row
+        output_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="nsew") 
 
         self.output_text_area = tk.Text(output_frame, height=15, width=70, wrap=tk.WORD,
                                         font=self.text_area_font,
@@ -184,35 +193,40 @@ class UI:
 
         # --- Correction Window Button ---
         self.correction_button = ttk.Button(root, text="Transcript Correction (Last Successful)", command=self.open_correction_window_callback)
-        self.correction_button.grid(row=5, column=0, columnspan=3, padx=5, pady=10, sticky="ew") # Adjusted row
+        self.correction_button.grid(row=5, column=0, columnspan=3, padx=5, pady=10, sticky="ew") 
 
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(4, weight=1) # Adjusted row for output_frame to take weight
+        root.rowconfigure(4, weight=1) 
 
         self.elements_to_disable_during_processing = [
             self.browse_button, self.process_button,
             self.token_entry, self.save_token_button, self.correction_button,
             self.diarization_checkbutton, self.timestamps_checkbutton,
-            self.model_dropdown, self.end_times_checkbutton
+            self.model_dropdown, self.end_times_checkbutton,
+            self.auto_merge_checkbutton # ADDED auto_merge_checkbutton
         ]
         self.save_token_callback = None
         self.model_hover_tooltip = None
 
-        # Call at the end of __init__ to set initial visibility of token frame
-        self._toggle_token_input_visibility()
+        self._update_diarization_dependent_options() # Call at the end of __init__
 
 
-    def _toggle_token_input_visibility(self):
-        """Shows or hides the Hugging Face token input frame based on diarization checkbox."""
-        if self.enable_diarization_var.get():
-            # Place the token frame within the options_outer_frame.
-            # It will appear after the checkbox_options_frame because it's packed later.
+    def _update_diarization_dependent_options(self): # RENAMED and UPDATED method
+        """Shows/hides token input and enables/disables auto-merge based on diarization checkbox."""
+        diarization_enabled = self.enable_diarization_var.get()
+
+        # Token frame visibility
+        if diarization_enabled:
             self.token_frame.pack(fill=tk.X, pady=(5, 10), padx=5, after=self.checkbox_options_frame)
         else:
             self.token_frame.pack_forget()
-        # Optional: If you want to force re-layout of the parent if using grid for token_frame
-        # self.options_outer_frame.master.layout() or self.options_outer_frame.update_idletasks()
 
+        # Auto-merge checkbutton state
+        if diarization_enabled:
+            self.auto_merge_checkbutton.config(state=tk.NORMAL)
+        else:
+            self.auto_merge_checkbutton.config(state=tk.DISABLED)
+            self.auto_merge_var.set(False) # Uncheck if diarization is disabled
 
     def show_model_tooltip(self, event=None):
         selected_model_key = self.model_var.get()
@@ -290,6 +304,7 @@ class UI:
             elif hasattr(element, 'config'):
                  element.config(state=tk.NORMAL)
         self._toggle_end_time_option()
+        self._update_diarization_dependent_options() # Ensure auto-merge state is correct
 
 
     def update_audio_file_entry_display(self, file_paths: list):
