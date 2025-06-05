@@ -39,7 +39,7 @@ class LaunchScreen(tk.Toplevel):
         main_frame = ttk.Frame(self, padding=(main_frame_padding, main_frame_padding, main_frame_padding, main_frame_padding))
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        app_name_label = ttk.Label(main_frame, text="Transcription Oli", font=("Helvetica", 24, "bold"))
+        app_name_label = ttk.Label(main_frame, text="Transcription dev test", font=("Helvetica", 24, "bold"))
         app_name_label.pack(pady=(10, 5)) # Adjusted padding
 
         self.loading_label_text = tk.StringVar(value="Loading application, please wait...")
@@ -56,11 +56,11 @@ class LaunchScreen(tk.Toplevel):
 
         # Define max dimensions for the GIF based on window size and padding
         # Max width: window width - (2 * frame_padding) - some_extra_margin_for_gif
-        self.max_gif_width = self.window_width - (2 * main_frame_padding) - 100 
+        self.max_gif_width = self.window_width - (2 * main_frame_padding) - 200 
         # Max height: Consider available space after labels and padding
         # Approx: window_height - (2*frame_padding) - app_name_pady - loading_label_pady - gif_label_pady_top - gif_label_pady_bottom
         approx_label_space = (10+5) + 5 + (10) # Approximate Y padding for labels
-        self.max_gif_height = self.window_height - (2*main_frame_padding) - approx_label_space - 100 # Extra bottom margin for GIF
+        self.max_gif_height = self.window_height - (2*main_frame_padding) - approx_label_space - 200 # Extra bottom margin for GIF
 
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))

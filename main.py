@@ -10,7 +10,7 @@ import multiprocessing
 
 from utils import constants
 from utils.logging_setup import setup_logging
-from utils.config_manager import ConfigManager # Ensure this uses the user-writable path
+from utils.config_manager import ConfigManager 
 from core.audio_processor import AudioProcessor
 from ui.main_window import UI
 from ui.correction_window import CorrectionWindow
@@ -28,8 +28,6 @@ class MainApp:
         app_instance = self
         self.root = root_tk_param
 
-        # Ensure ConfigManager is initialized to use a user-writable path
-        # This change should be made within ConfigManager itself, but we rely on it here.
         self.config_manager = ConfigManager(constants.DEFAULT_CONFIG_FILE) 
         self.audio_processor = None 
         self.processing_thread = None 
@@ -81,15 +79,14 @@ class MainApp:
         success = False
         error_for_finalize = None
         try:
-            # Pass the initial state of the diarization checkbox from the UI
-            # This ensures _ensure_audio_processor_initialized knows user's intent
-            # However, _ensure_audio_processor_initialized will re-read from UI if not initial_setup
             initial_diarization_enabled = self.ui.enable_diarization_var.get() if self.ui else False
+            initial_auto_merge_enabled = self.ui.auto_merge_var.get() if self.ui and initial_diarization_enabled else False # Only relevant if diarization is on
 
             success = self._ensure_audio_processor_initialized(
                 is_initial_setup=True, 
-                initial_model_key="large (recommended)", # Default model for first load
-                initial_diarization_enabled_from_ui=initial_diarization_enabled
+                initial_model_key="large (recommended)", 
+                initial_diarization_enabled_from_ui=initial_diarization_enabled,
+                initial_auto_merge_enabled_from_ui=initial_auto_merge_enabled # Pass new initial state
             ) 
             logger.info(f"Model loading thread: _ensure_audio_processor_initialized returned {success}") 
             self.completion_queue.put((success, error_for_finalize))
@@ -141,8 +138,6 @@ class MainApp:
             else:
                 logger.error("Root window does not exist at finalization after successful model load!") 
         else:
-            # This error message now primarily means essential (transcription) models failed.
-            # Diarization-specific failures are handled as warnings within _ensure_audio_processor_initialized.
             logger.error(f"Essential model loading failed. Error: {error_msg}") 
             full_error_message = f"Failed to initialize essential application models (transcription): {error_msg or 'Unknown error'}.\nPlease check logs and setup." 
             msg_parent = self.root if self.root and self.root.winfo_exists() else None 
@@ -255,27 +250,26 @@ class MainApp:
 
     def _load_and_display_saved_token(self): 
         logger.info("Loading saved Hugging Face token...") 
-        # This should now load from the user-writable path if ConfigManager is updated
         token = self.config_manager.load_huggingface_token() 
         self.ui.load_token_ui(token if token else "") 
 
     def save_huggingface_token(self, token: str): 
         token_to_save = token.strip() if token else "" 
         logger.info(f"Saving Hugging Face token: {'Present' if token_to_save else 'Empty'}") 
-        # This should now save to the user-writable path if ConfigManager is updated
         self.config_manager.save_huggingface_token(token_to_save) 
         self.config_manager.set_use_auth_token(bool(token_to_save)) 
         messagebox.showinfo("Token Saved", "Hugging Face token has been saved." if token_to_save else "Hugging Face token has been cleared.", parent=self.root) 
         
-        # Trigger a re-check/re-initialization of AudioProcessor if token changes,
-        # especially if diarization was previously unavailable due to a missing token.
         if self.audio_processor: 
              logger.info("Hugging Face token changed, re-evaluating AudioProcessor state.")
-             # We want to re-initialize if diarization is enabled and token was just provided/changed
              if self.ui and self.ui.enable_diarization_var.get():
                  try:
-                    self._ensure_audio_processor_initialized(force_reinitialize=True)
-                    # Check if diarization became available and notify user
+                    # Pass current auto_merge state as well
+                    current_auto_merge = self.ui.auto_merge_var.get() if self.ui else False
+                    self._ensure_audio_processor_initialized(
+                        force_reinitialize=True,
+                        initial_auto_merge_enabled_from_ui=current_auto_merge # Ensure this is passed
+                    )
                     if self.audio_processor and self.audio_processor.enable_diarization and \
                        self.audio_processor.diarization_handler and \
                        self.audio_processor.diarization_handler.is_model_loaded():
@@ -283,7 +277,7 @@ class MainApp:
                             "type": constants.MSG_TYPE_STATUS,
                             "text": "Diarization model loaded successfully with new token."
                         })
-                    elif self.audio_processor: # Diarization still not loaded
+                    elif self.audio_processor: 
                          self.ui_update_queue.put({
                             "type": constants.MSG_TYPE_STATUS,
                             "text": "Warning: Diarization still unavailable. Check token & HF conditions."
@@ -331,11 +325,24 @@ class MainApp:
         } 
         return mapping.get(ui_model_key, "large") 
 
-    def _ensure_audio_processor_initialized(self, force_reinitialize=False, is_initial_setup=False, initial_model_key=None, initial_diarization_enabled_from_ui=None):
-        # Determine current UI selections for diarization and model
+    def _ensure_audio_processor_initialized(self, force_reinitialize=False, is_initial_setup=False, 
+                                           initial_model_key=None, 
+                                           initial_diarization_enabled_from_ui=None,
+                                           initial_auto_merge_enabled_from_ui=None): # ADDED initial_auto_merge
+        
         current_enable_diarization = initial_diarization_enabled_from_ui \
             if is_initial_setup and initial_diarization_enabled_from_ui is not None \
             else (self.ui.enable_diarization_var.get() if hasattr(self, 'ui') and self.ui else False)
+
+        # Get current auto_merge state from UI, or use initial if provided
+        current_auto_merge_enabled = initial_auto_merge_enabled_from_ui \
+            if is_initial_setup and initial_auto_merge_enabled_from_ui is not None \
+            else (self.ui.auto_merge_var.get() if hasattr(self, 'ui') and self.ui else False)
+        
+        # Auto-merge is only relevant if diarization is also enabled
+        if not current_enable_diarization:
+            current_auto_merge_enabled = False
+
 
         ui_model_key_to_use = initial_model_key
         if hasattr(self, 'ui') and self.ui and self.ui.model_var.get():
@@ -354,13 +361,13 @@ class MainApp:
         if self.audio_processor and not force_reinitialize:
             options_changed = (
                 self.audio_processor.transcription_handler.model_name != actual_whisper_model_name or
-                self.audio_processor.enable_diarization != current_enable_diarization or # Check if user's intent for diarization changed
+                self.audio_processor.enable_diarization != current_enable_diarization or
                 self.audio_processor.include_timestamps != current_include_timestamps or
-                self.audio_processor.include_end_times != current_include_end_times
+                self.audio_processor.include_end_times != current_include_end_times or
+                self.audio_processor.enable_auto_merge != current_auto_merge_enabled # CHECK auto_merge
             )
-            if not options_changed and self.audio_processor.are_models_loaded(): # are_models_loaded now checks transcription mainly
+            if not options_changed and self.audio_processor.are_models_loaded():
                 logger.debug("Audio processor already initialized, essential models loaded, and options unchanged.")
-                # Still check if diarization state needs an update even if no re-init
                 if current_enable_diarization and \
                    (not self.audio_processor.diarization_handler or \
                     not self.audio_processor.diarization_handler.is_model_loaded()):
@@ -371,10 +378,13 @@ class MainApp:
                     })
                 return True
             if options_changed: force_reinitialize = True
-            elif not self.audio_processor.are_models_loaded(): force_reinitialize = True # e.g. transcription model failed
+            elif not self.audio_processor.are_models_loaded(): force_reinitialize = True
 
         if force_reinitialize or not self.audio_processor:
-            logger.info(f"Initializing/Re-initializing AudioProcessor. Model: '{actual_whisper_model_name}'. Diarization Requested: {current_enable_diarization}. Initial Setup: {is_initial_setup}, ForceReinit: {force_reinitialize}")
+            logger.info(f"Initializing/Re-initializing AudioProcessor. Model: '{actual_whisper_model_name}'. "
+                        f"Diarization Requested: {current_enable_diarization}. "
+                        f"Auto Merge: {current_auto_merge_enabled}. " # Log new option
+                        f"Initial Setup: {is_initial_setup}, ForceReinit: {force_reinitialize}")
             current_progress_callback = self._make_progress_callback()
             try:
                 use_auth = self.config_manager.get_use_auth_token()
@@ -385,20 +395,20 @@ class MainApp:
                 }
                 self.audio_processor = AudioProcessor(
                     config=processor_config, progress_callback=current_progress_callback,
-                    enable_diarization=current_enable_diarization, # Pass user's current intent
+                    enable_diarization=current_enable_diarization, 
                     include_timestamps=current_include_timestamps,
-                    include_end_times=current_include_end_times
+                    include_end_times=current_include_end_times,
+                    enable_auto_merge=current_auto_merge_enabled # PASS auto_merge
                 )
-                if not self.audio_processor.are_models_loaded(): # This checks if transcription model failed
+                if not self.audio_processor.are_models_loaded(): 
                     err_msg = "AudioProcessor critical models (transcription) failed to load. Check logs."
                     logger.error(err_msg)
-                    raise RuntimeError(err_msg) # Fatal if transcription model fails
+                    raise RuntimeError(err_msg) 
 
-                # Check diarization status post-initialization if it was requested
                 if self.audio_processor.enable_diarization and \
                    (not self.audio_processor.diarization_handler or \
                     not self.audio_processor.diarization_handler.is_model_loaded()):
-                    warning_msg = "Diarization was enabled, but the diarization model could not be loaded (e.g., missing/invalid Hugging Face token, network issue, or conditions not accepted on Hugging Face for pyannote models). Diarization features will be disabled for this session."
+                    warning_msg = "Diarization was enabled, but the diarization model could not be loaded. Diarization features will be disabled."
                     logger.warning(f"Non-fatal issue during init: {warning_msg}")
                     if hasattr(self, 'ui_update_queue') and self.ui_update_queue:
                         self.ui_update_queue.put({
@@ -407,7 +417,7 @@ class MainApp:
                         })
                 elif self.audio_processor.enable_diarization and self.audio_processor.diarization_handler and self.audio_processor.diarization_handler.is_model_loaded():
                      logger.info("Diarization enabled and model loaded successfully.")
-                     if not is_initial_setup: # Don't show this on first app load, only on re-init
+                     if not is_initial_setup: 
                         self.ui_update_queue.put({
                             "type": constants.MSG_TYPE_STATUS,
                             "text": "Diarization model loaded successfully."
@@ -429,11 +439,13 @@ class MainApp:
         if self.processing_thread and self.processing_thread.is_alive(): 
             messagebox.showwarning("Busy", "Processing is already in progress.", parent=self.root); return 
         try:
-            # Pass current UI state for diarization to ensure it's up-to-date before processing
             current_diarization_enabled = self.ui.enable_diarization_var.get() if self.ui else False
+            current_auto_merge_enabled = self.ui.auto_merge_var.get() if self.ui and current_diarization_enabled else False
+            
             if not self._ensure_audio_processor_initialized(
-                force_reinitialize=True, # Force re-check/re-init based on current UI settings
-                initial_diarization_enabled_from_ui=current_diarization_enabled
+                force_reinitialize=True, 
+                initial_diarization_enabled_from_ui=current_diarization_enabled,
+                initial_auto_merge_enabled_from_ui=current_auto_merge_enabled # Pass current auto_merge state
                 ): 
                 logger.error("Start processing: Audio processor not ready or failed to re-initialize. Aborting."); return 
         except Exception as e:
@@ -460,7 +472,7 @@ class MainApp:
         logger.info(f"Thread worker (single): Starting audio processing for: {audio_file_to_process}") 
         status, msg, is_empty, segments_data = constants.STATUS_ERROR, "Unknown error during single file processing.", False, None 
         try:
-            if not self.audio_processor or not self.audio_processor.transcription_handler.is_model_loaded(): # Check transcription model
+            if not self.audio_processor or not self.audio_processor.transcription_handler.is_model_loaded(): 
                 msg = "Critical error: Audio processor or transcription model became unavailable before processing." 
                 logger.error(msg) 
             else:

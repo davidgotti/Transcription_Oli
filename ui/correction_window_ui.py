@@ -25,20 +25,20 @@ class CorrectionWindowUI:
         self.audio_progress_var = tk.DoubleVar()
 
         # --- Colors and Styles ---
-        # Define a desired font for text areas (can be same as in main_window or different)
-        self.text_area_font_family = 'Helvetica' # Or your preferred font family
-        self.text_area_font_size = 12          # Example: Size 12. Adjust as needed.
+        self.text_area_font_family = 'Helvetica' 
+        self.text_area_font_size = 12          
         self.text_area_base_font = (self.text_area_font_family, self.text_area_font_size)
         self.text_area_italic_font = (self.text_area_font_family, self.text_area_font_size, 'italic')
         self.text_area_bold_font = (self.text_area_font_family, self.text_area_font_size, 'bold')
-        # MODIFIED COLORS:
-        self.text_area_bg_color = "white"  # Changed from "#2E2E2E"
-        self.text_area_fg_color = "black"  # Changed from "white"
-        # Consider a lighter editing background, or remove custom to make it white
-        self.editing_segment_bg_color = "#E0E0FF" # Example: a very light blue/lavender, or "white"
-        self.timestamp_fg_color = "#555555" # Darker grey for better contrast on white
-        self.active_highlight_bg = "yellow"
-        self.active_highlight_fg = "black"      
+        
+        self.text_area_bg_color = "white" 
+        self.text_area_fg_color = "black" 
+        self.editing_segment_bg_color = "#E0E0FF" 
+        self.timestamp_fg_color = "#555555" 
+        self.active_highlight_bg = "yellow" 
+        self.active_highlight_fg = "black"
+        self.editing_timestamp_bg_color = "lightblue" 
+        self.placeholder_text_fg_color = "grey" # NEW: Color for placeholder text
 
         # --- Main layout ---
         main_container_frame = ttk.Frame(self.window, padding="10")
@@ -85,7 +85,6 @@ class CorrectionWindowUI:
         self.forward_button.pack(side=tk.LEFT, padx=2)
         
         self.jump_to_segment_button = ttk.Button(audio_controls_frame, text="|< Jump to Seg Start (-1s)", command=jump_to_segment_start_callback)
-        # This button will be packed/unpacked dynamically by CorrectionWindow logic
         
         self.audio_progress_bar = ttk.Scale(audio_controls_frame, orient=tk.HORIZONTAL, from_=0, to=100, variable=self.audio_progress_var, command=on_progress_bar_seek_callback, state=tk.DISABLED)
         self.audio_progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
@@ -93,13 +92,13 @@ class CorrectionWindowUI:
         self.current_time_label.pack(side=tk.LEFT, padx=5)
 
         # --- Transcription Text Area ---
-        text_area_frame = ttk.Frame(main_container_frame) #
+        text_area_frame = ttk.Frame(main_container_frame) 
         text_area_frame.pack(fill=tk.BOTH, expand=True, side=tk.TOP)
         
         self.transcription_text = tk.Text(text_area_frame, wrap=tk.WORD, height=15, width=80, undo=True,
                                           background=self.text_area_bg_color,
                                           foreground=self.text_area_fg_color,
-                                          insertbackground=self.text_area_fg_color,
+                                          insertbackground=self.text_area_fg_color, 
                                           font=self.text_area_base_font)
         self.text_scrollbar = ttk.Scrollbar(text_area_frame, orient=tk.VERTICAL, command=self.transcription_text.yview)
         self.transcription_text.configure(yscrollcommand=self.text_scrollbar.set)
@@ -108,36 +107,36 @@ class CorrectionWindowUI:
 
         self._configure_text_tags()
 
-        # Bind events that are handled by CorrectionCallbackHandler
         self.transcription_text.tag_bind("speaker_tag_style", "<Button-1>", on_speaker_click_callback)
         self.transcription_text.tag_bind("merge_tag_style", "<Button-1>", on_merge_click_callback)
         self.transcription_text.tag_bind("merge_tag_style", "<Enter>", lambda e: self.transcription_text.config(cursor="hand2"))
         self.transcription_text.tag_bind("merge_tag_style", "<Leave>", lambda e: self.transcription_text.config(cursor=""))
 
-        self.transcription_text.bind("<Button-3>", text_area_right_click_callback)
-        self.transcription_text.bind("<Double-1>", text_area_double_click_callback)
+        self.transcription_text.bind("<Button-3>", text_area_right_click_callback) 
+        self.transcription_text.bind("<Double-1>", text_area_double_click_callback) 
         self.transcription_text.bind("<Button-1>", text_area_left_click_edit_mode_callback) 
 
-        self.transcription_text.config(state=tk.DISABLED) # Start as read-only
-
-        # --- Context Menu (created by CorrectionWindow, but UI elements here) ---
-        # The CorrectionWindow will create and manage the context_menu object itself,
-        # as its commands will call methods in CorrectionCallbackHandler.
+        self.transcription_text.config(state=tk.DISABLED) 
 
         logger.info("CorrectionWindowUI elements created.")
 
     def _configure_text_tags(self):
         """Configures all necessary tags for the transcription text area."""
-        self.transcription_text.tag_configure("speaker_tag_style")
-        # Use the bold font defined above for the merge tag
+        self.transcription_text.tag_configure("speaker_tag_style") 
         self.transcription_text.tag_configure("merge_tag_style", foreground="#008000", underline=True, font=self.text_area_bold_font)
         self.transcription_text.tag_configure("timestamp_tag_style", foreground=self.timestamp_fg_color)
-        # Use the italic font defined above for no_timestamp_tag_style
         self.transcription_text.tag_configure("no_timestamp_tag_style", foreground=self.timestamp_fg_color, font=self.text_area_italic_font)
+        
         self.transcription_text.tag_configure("active_text_highlight", foreground=self.active_highlight_fg, background=self.active_highlight_bg)
-        self.transcription_text.tag_configure("inactive_text_default", foreground=self.text_area_fg_color, background=self.text_area_bg_color) # Already uses base colors
-        self.transcription_text.tag_configure("editing_active_segment_text", background=self.editing_segment_bg_color)
-        logger.debug("Text area tags configured.")
+        self.transcription_text.tag_configure("inactive_text_default", foreground=self.text_area_fg_color, background=self.text_area_bg_color) 
+        self.transcription_text.tag_configure("editing_active_segment_text", background=self.editing_segment_bg_color) 
+        self.transcription_text.tag_configure("editing_active_timestamp", background=self.editing_timestamp_bg_color) 
+        
+        # NEW: Tag for placeholder text styling
+        self.transcription_text.tag_configure("placeholder_text_style", 
+                                              font=self.text_area_italic_font, 
+                                              foreground=self.placeholder_text_fg_color)
+        logger.debug("Text area tags configured in CorrectionWindowUI.")
 
     def set_play_pause_button_text(self, text: str):
         if hasattr(self, 'play_pause_button') and self.play_pause_button.winfo_exists():
@@ -154,7 +153,6 @@ class CorrectionWindowUI:
             self.audio_progress_var.set(value)
 
     def set_widgets_state(self, widgets: list, state: str):
-        """Sets the state (tk.NORMAL or tk.DISABLED) for a list of widgets."""
         for widget in widgets:
             if widget and hasattr(widget, 'winfo_exists') and widget.winfo_exists():
                 widget.config(state=state)
