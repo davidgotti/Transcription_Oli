@@ -1,43 +1,56 @@
 # ui/correction_window.py
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog 
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import logging
 import os
 import queue
 
 try:
-    from utils import constants 
+    from utils import constants
     from core.correction_window_logic import SegmentManager
-    from .correction_window_ui import CorrectionWindowUI 
+    from .correction_window_ui import CorrectionWindowUI, ToolTip # Import ToolTip from CUI
     from .correction_window_callbacks import CorrectionCallbackHandler
     from .audio_player import AudioPlayer
+    from utils.tips_data import get_tip # For fetching tip strings
+    # ConfigManager will be passed in, no direct import needed here unless for type hinting
 except ImportError:
     import sys
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir) 
+    project_root = os.path.dirname(current_dir)
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
     from utils import constants
     from core.correction_window_logic import SegmentManager
-    from ui.correction_window_ui import CorrectionWindowUI
+    from ui.correction_window_ui import CorrectionWindowUI, ToolTip
     from ui.correction_window_callbacks import CorrectionCallbackHandler
     from ui.audio_player import AudioPlayer
+    from utils.tips_data import get_tip
+
 
 logger = logging.getLogger(__name__)
 
 class CorrectionWindow:
-    def __init__(self, parent_root, initial_include_timestamps=True, initial_include_end_times=False):
+    def __init__(self, parent_root,
+                 config_manager_instance, # Added
+                 initial_show_tips_state,   # Added
+                 initial_include_timestamps=True,
+                 initial_include_end_times=False):
         self.parent_root = parent_root
+        self.config_manager = config_manager_instance # Store config_manager
         self.window = tk.Toplevel(parent_root)
         self.window.title("Transcription Correction Tool")
-        self.window.geometry("900x700") 
+        self.window.geometry("900x700")
 
         self.segment_manager = SegmentManager(parent_window_for_dialogs=self.window)
-        self.audio_player = None 
+        self.audio_player = None
         self.audio_player_update_queue = None
 
         self.callback_handler = CorrectionCallbackHandler(self)
-        
+
+        # --- Tips Feature ---
+        self.show_tips_var_corr = tk.BooleanVar(value=initial_show_tips_state)
+        self.tips_widgets_corr = {} # To store ToolTip instances for this window
+
         self.ui = CorrectionWindowUI(
             parent_tk_window=self.window,
             browse_transcription_callback=self.callback_handler.browse_transcription_file,
@@ -50,40 +63,95 @@ class CorrectionWindow:
             on_progress_bar_seek_callback=self._on_progress_bar_seek,
             jump_to_segment_start_callback=self._jump_to_segment_start_action,
             text_area_double_click_callback=self.callback_handler.handle_text_area_double_click,
-            text_area_right_click_callback=self.callback_handler.handle_text_area_right_click, 
+            text_area_right_click_callback=self.callback_handler.handle_text_area_right_click,
             text_area_left_click_edit_mode_callback=self.callback_handler.handle_text_area_left_click_edit_mode,
             on_speaker_click_callback=self.callback_handler.on_speaker_click,
-            on_merge_click_callback=self.callback_handler.on_merge_click
+            on_merge_click_callback=self.callback_handler.on_merge_click,
+            # Pass tips-related var and command to UI
+            show_tips_var_ref=self.show_tips_var_corr,
+            toggle_tips_callback_ref=self._on_toggle_tips_corr
         )
-        
+
         self.output_include_timestamps = initial_include_timestamps
         self.output_include_end_times = initial_include_end_times
-        
+
         self.currently_highlighted_text_seg_id = None
-        
-        self.text_edit_mode_active = False 
-        self.editing_segment_id = None    
-        self.text_content_start_index_in_edit = None # Store precise start index for text edit
 
-        self.timestamp_edit_mode_active = False 
-        self.editing_segment_id_for_ts = None 
-        self.timestamp_edit_dialog_instance = None 
+        self.text_edit_mode_active = False
+        self.editing_segment_id = None
+        self.text_content_start_index_in_edit = None
 
-        self.right_clicked_segment_id = None 
+        self.timestamp_edit_mode_active = False
+        self.editing_segment_id_for_ts = None
+        self.timestamp_edit_dialog_instance = None
 
-        self._setup_context_menu() 
+        self.right_clicked_segment_id = None
+
+        self._setup_context_menu()
 
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.window.bind('<Control-s>', lambda e: self.callback_handler.save_changes()) 
-        self.window.bind('<Escape>', self._handle_escape_key) 
+        self.window.bind('<Control-s>', lambda e: self.callback_handler.save_changes())
+        self.window.bind('<Escape>', self._handle_escape_key)
         self.window.after(100, self._poll_audio_player_queue)
-        logger.info("CorrectionWindow fully initialized with new edit mode states.")
+        
+        self._on_toggle_tips_corr() # Apply initial tip state and setup tooltips
+
+        logger.info("CorrectionWindow fully initialized with tips feature.")
+
+
+    def _add_tooltip_for_widget_corr(self, widget, tip_key: str, wraplength=250):
+        """Adds a tooltip for a widget if tips are enabled for the correction window."""
+        if not widget: return
+        tip_text = get_tip("correction_window", tip_key)
+
+        # Clear any existing tooltip for this widget first
+        if widget in self.tips_widgets_corr:
+            self.tips_widgets_corr[widget].unbind()
+            del self.tips_widgets_corr[widget]
+
+        if self.show_tips_var_corr.get() and tip_text:
+            tooltip = ToolTip(widget, tip_text, wraplength=wraplength) # ToolTip from CUI
+            self.tips_widgets_corr[widget] = tooltip
+
+
+    def _on_toggle_tips_corr(self):
+        """Handles the Show Tips checkbox action for the correction window."""
+        show = self.show_tips_var_corr.get()
+        self.config_manager.set_correction_window_show_tips(show) # Save preference
+        logger.info(f"Correction window tips toggled: {'On' if show else 'Off'}")
+
+        if show:
+            self._setup_correction_window_tooltips()
+        else:
+            for widget, tooltip_instance in list(self.tips_widgets_corr.items()):
+                tooltip_instance.unbind()
+            self.tips_widgets_corr.clear()
+
+    def _setup_correction_window_tooltips(self):
+        """(Re)Initializes all tooltips for the correction window."""
+        if not hasattr(self.ui, 'tips_checkbox_corr'): # UI might not be fully ready
+            return
+
+        self._add_tooltip_for_widget_corr(self.ui.tips_checkbox_corr, "show_tips_checkbox_corr")
+        self._add_tooltip_for_widget_corr(self.ui.browse_transcription_button, "transcription_file_browse_corr")
+        self._add_tooltip_for_widget_corr(self.ui.browse_audio_button, "audio_file_browse_corr")
+        self._add_tooltip_for_widget_corr(self.ui.load_files_button, "load_files_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.assign_speakers_button, "assign_speakers_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.save_changes_button, "save_changes_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.play_pause_button, "play_pause_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.rewind_button, "rewind_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.forward_button, "forward_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.jump_to_segment_button, "jump_to_segment_button_corr")
+        self._add_tooltip_for_widget_corr(self.ui.audio_progress_bar, "audio_progress_bar_corr")
+        self._add_tooltip_for_widget_corr(self.ui.current_time_label, "time_labels_corr")
+        self._add_tooltip_for_widget_corr(self.ui.transcription_text, "transcription_text_area_corr", wraplength=350)
+        # Add more calls here for other widgets in CorrectionWindowUI that need tips
 
     def _setup_context_menu(self):
         self.context_menu = tk.Menu(self.ui.transcription_text, tearoff=0)
         self.context_menu.add_command(label="Edit Segment Text", command=self.callback_handler.edit_segment_text_action_from_menu)
-        self.context_menu.add_command(label="Edit Timestamps", command=self.callback_handler.edit_segment_timestamps_action_menu) 
-        self.context_menu.add_command(label="Add New Segment", command=self.callback_handler.add_new_segment_action_menu) 
+        self.context_menu.add_command(label="Edit Timestamps", command=self.callback_handler.edit_segment_timestamps_action_menu)
+        self.context_menu.add_command(label="Add New Segment", command=self.callback_handler.add_new_segment_action_menu)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Remove Segment", command=self.callback_handler.remove_segment_action_from_menu)
         self.context_menu.add_command(label="Change Speaker for this Segment", command=self.callback_handler.change_segment_speaker_action_menu)
@@ -105,7 +173,7 @@ class CorrectionWindow:
         
         try:
             self.context_menu.tk_popup(event.x_root, event.y_root)
-        except tk.TclError: 
+        except tk.TclError:
             self.context_menu.tk_popup(self.window.winfo_pointerx(), self.window.winfo_pointery())
 
     def is_any_edit_mode_active(self) -> bool:
@@ -117,18 +185,18 @@ class CorrectionWindow:
 
         if self.text_edit_mode_active:
             self._exit_text_edit_mode(save_changes=save_changes)
-        if self.timestamp_edit_mode_active: # Check again in case first exit affected it
-            self._exit_timestamp_edit_mode(save_changes=False if not save_changes else True) 
+        if self.timestamp_edit_mode_active:
+            self._exit_timestamp_edit_mode(save_changes=False if not save_changes else True)
         
-        # If no re-render was triggered by save_changes=True in either exit method,
-        # but a mode was active, re-render to ensure consistent UI state (e.g. remove highlights)
-        # This is now handled by _exit_text_edit_mode always calling render,
-        # and _exit_timestamp_edit_mode calling render if save_changes is false.
+        # Re-enable tips checkbox if it was disabled by edit mode
+        if hasattr(self.ui, 'tips_checkbox_corr'):
+            self.ui.tips_checkbox_corr.config(state=tk.NORMAL)
+
 
     def _handle_escape_key(self, event=None):
         if self.text_edit_mode_active:
             logger.debug("Escape key pressed during text edit mode. Exiting without saving text change.")
-            self._exit_text_edit_mode(save_changes=False) 
+            self._exit_text_edit_mode(save_changes=False)
             return "break"
         elif self.timestamp_edit_mode_active and self.timestamp_edit_dialog_instance:
             logger.debug("Escape key pressed during timestamp edit mode. Closing dialog (cancel).")
@@ -138,7 +206,7 @@ class CorrectionWindow:
 
     def _load_files_core_logic(self, transcription_path: str, audio_path: str):
         logger.info(f"Core load: TXT='{transcription_path}', AUDIO='{audio_path}'")
-        self._exit_all_edit_modes(save_changes=False) 
+        self._exit_all_edit_modes(save_changes=False)
         try:
             if self.audio_player:
                 self.audio_player.stop_resources(); self.audio_player = None
@@ -149,12 +217,12 @@ class CorrectionWindow:
             with open(transcription_path, 'r', encoding='utf-8') as f: lines = f.readlines()
             
             if not self.segment_manager.parse_transcription_lines(lines):
-                 self._disable_audio_controls(); return 
+                 self._disable_audio_controls(); return
             
-            self._render_segments_to_text_area() 
+            self._render_segments_to_text_area()
             
             self.audio_player = AudioPlayer(audio_path, on_error_callback=self._handle_audio_player_error)
-            if not self.audio_player.is_ready(): self._disable_audio_controls(); return 
+            if not self.audio_player.is_ready(): self._disable_audio_controls(); return
 
             self.audio_player_update_queue = self.audio_player.get_update_queue()
             
@@ -163,35 +231,42 @@ class CorrectionWindow:
             self.ui.update_audio_progress_bar_display(curr_prog, max_prog)
             self._update_time_labels_display()
 
-            self.ui.set_widgets_state([self.ui.play_pause_button, self.ui.rewind_button, self.ui.forward_button, self.ui.audio_progress_bar, self.ui.save_changes_button], tk.NORMAL)
+            widgets_to_enable = [
+                self.ui.play_pause_button, self.ui.rewind_button, self.ui.forward_button,
+                self.ui.audio_progress_bar, self.ui.save_changes_button
+            ]
+            if hasattr(self.ui, 'tips_checkbox_corr'): # Also re-enable tips checkbox
+                widgets_to_enable.append(self.ui.tips_checkbox_corr)
+
+            self.ui.set_widgets_state(widgets_to_enable, tk.NORMAL)
             self.ui.assign_speakers_button.config(state=tk.NORMAL if self.segment_manager.segments else tk.DISABLED)
             self.ui.load_files_button.config(text="Reload Files")
             self.ui.set_play_pause_button_text("Play")
             logger.info("Files loaded successfully (core logic).")
-        except Exception as e: 
+        except Exception as e:
             logger.exception("Error during _load_files_core_logic.")
             messagebox.showerror("Load Error", f"Unexpected error during file loading: {e}", parent=self.window)
             self._disable_audio_controls()
 
     def _save_changes_core_logic(self):
-        self._exit_all_edit_modes(save_changes=True) 
+        self._exit_all_edit_modes(save_changes=True)
         formatted_lines = self.segment_manager.format_segments_for_saving(
             self.output_include_timestamps, self.output_include_end_times
         )
-        if not formatted_lines: 
+        if not formatted_lines:
             messagebox.showwarning("Nothing to Save", "No valid segments found to save.", parent=self.window); return
             
-        content_to_save = "\n".join(formatted_lines) + "\n" 
+        content_to_save = "\n".join(formatted_lines) + "\n"
         initial_filename = "corrected_transcription.txt"
-        if self.ui.get_transcription_file_path(): 
+        if self.ui.get_transcription_file_path():
             try:
                 base, ext = os.path.splitext(os.path.basename(self.ui.get_transcription_file_path()))
                 initial_filename = f"{base}_corrected{ext if ext else '.txt'}"
-            except Exception: pass 
+            except Exception: pass
 
         save_path = filedialog.asksaveasfilename(
-            initialfile=initial_filename, defaultextension=".txt", 
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")], 
+            initialfile=initial_filename, defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
             parent=self.window, title="Save Corrected Transcription As"
         )
         if not save_path: logger.info("Save operation cancelled."); return
@@ -199,12 +274,13 @@ class CorrectionWindow:
             with open(save_path, 'w', encoding='utf-8') as f: f.write(content_to_save)
             messagebox.showinfo("Saved Successfully", f"Corrected transcription saved to:\n{save_path}", parent=self.window)
             logger.info(f"Changes saved to {save_path}")
-        except Exception as e: 
+        except Exception as e:
             messagebox.showerror("Save Error", f"Could not save file: {e}", parent=self.window)
             logger.exception(f"Error during _save_changes_core_logic to {save_path}")
 
     def _open_assign_speakers_dialog_core_logic(self):
         self._exit_all_edit_modes(save_changes=True)
+        # ... (rest of the method remains the same)
         dialog = tk.Toplevel(self.window); dialog.title("Assign Speaker Names"); dialog.transient(self.window); dialog.grab_set()
         main_frame = ttk.Frame(dialog, padding="10"); main_frame.pack(expand=True, fill=tk.BOTH)
         ttk.Label(main_frame, text="Assign custom names to raw speaker labels or add new speakers:").pack(anchor="w", pady=(0,5))
@@ -254,6 +330,7 @@ class CorrectionWindow:
         dialog.wait_window()
 
     def _edit_segment_timestamps_dialog_logic(self, segment_id: str):
+        # ... (rest of the method remains the same)
         segment = self.segment_manager.get_segment_by_id(segment_id)
         if not segment: 
             logger.warning(f"Edit Timestamps: Could not find segment {segment_id}")
@@ -322,13 +399,14 @@ class CorrectionWindow:
         self._center_dialog(dialog, min_width=350)
 
     def _on_timestamp_dialog_close(self, dialog_instance, save: bool):
-        if dialog_instance == self.timestamp_edit_dialog_instance: 
-            self.timestamp_edit_dialog_instance = None 
-            self._exit_timestamp_edit_mode(save_changes=save) 
-        if dialog_instance and dialog_instance.winfo_exists(): 
+        if dialog_instance == self.timestamp_edit_dialog_instance:
+            self.timestamp_edit_dialog_instance = None
+            self._exit_timestamp_edit_mode(save_changes=save)
+        if dialog_instance and dialog_instance.winfo_exists():
             dialog_instance.destroy()
 
     def _add_new_segment_dialog_logic(self, reference_segment_id_for_positioning: str | None, split_char_index: int | None = None):
+        # ... (rest of the method remains the same)
         self._exit_all_edit_modes(save_changes=True) 
 
         dialog = tk.Toplevel(self.window)
@@ -405,7 +483,7 @@ class CorrectionWindow:
                     feedback_label.config(text="Error: Failed to split segment.")
             else: 
                 new_segment_data = {
-                    "text": "", # Stored as empty, render will show placeholder
+                    "text": "", 
                     "speaker_raw": actual_speaker_raw,
                     "start_time": 0.0, 
                     "end_time": None,
@@ -432,8 +510,8 @@ class CorrectionWindow:
         self._center_dialog(dialog, min_width=400)
         dialog.wait_window()
 
-
     def _change_segment_speaker_dialog_logic(self, segment_id: str):
+        # ... (rest of the method remains the same)
         self._exit_all_edit_modes(save_changes=True)
         segment = self.segment_manager.get_segment_by_id(segment_id)
         if not segment: return
@@ -451,14 +529,13 @@ class CorrectionWindow:
         try: menu.tk_popup(self.window.winfo_pointerx(), self.window.winfo_pointery())
         except tk.TclError: menu.tk_popup(self.window.winfo_rootx()+100, self.window.winfo_rooty()+100)
 
+
     def _render_segments_to_text_area(self):
-        # Important: Exit any edit mode *before* clearing and re-rendering.
-        # This prevents trying to save data from a text area that's about to be wiped.
-        # Also, don't save changes from this specific call, as it's often a refresh.
+        # ... (rest of the method remains the same)
         if self.text_edit_mode_active:
-             self._exit_text_edit_mode(save_changes=False) # Exit without saving, render will show true state
+             self._exit_text_edit_mode(save_changes=False) 
         if self.timestamp_edit_mode_active:
-             self._exit_timestamp_edit_mode(save_changes=False) # Dialog handles its own saves
+             self._exit_timestamp_edit_mode(save_changes=False) 
         
         self.ui.transcription_text.config(state=tk.NORMAL)
         self.ui.transcription_text.delete("1.0", tk.END)
@@ -502,14 +579,14 @@ class CorrectionWindow:
                 self.ui.transcription_text.insert(tk.END, ": ")
             
             text_to_display = seg['text']
-            current_text_tags = ["inactive_text_default", seg.get("text_tag_id")] # Base tags
+            current_text_tags = ["inactive_text_default", seg.get("text_tag_id")] 
 
-            if not text_to_display: # Check if actual text is empty
+            if not text_to_display: 
                 text_to_display = constants.EMPTY_SEGMENT_PLACEHOLDER
                 current_text_tags = ["placeholder_text_style", seg.get("text_tag_id")] 
 
             text_content_actual_start_idx_str = self.ui.transcription_text.index(tk.END) 
-            self.ui.transcription_text.insert(tk.END, text_to_display, tuple(filter(None, current_text_tags))) # Ensure only valid tags
+            self.ui.transcription_text.insert(tk.END, text_to_display, tuple(filter(None, current_text_tags))) 
             text_content_actual_end_idx_str = self.ui.transcription_text.index(tk.END)
 
             if seg.get("text_tag_id"): 
@@ -520,16 +597,22 @@ class CorrectionWindow:
             
         self.ui.transcription_text.config(state=tk.DISABLED)
 
+
     def _toggle_global_ui_for_edit_mode(self, disable: bool):
         new_state = tk.DISABLED if disable else tk.NORMAL
         widgets_to_toggle = [
             self.ui.browse_transcription_button, self.ui.browse_audio_button,
             self.ui.load_files_button, self.ui.save_changes_button,
-            self.ui.assign_speakers_button 
+            self.ui.assign_speakers_button
         ]
+        # Also disable/enable the tips checkbox
+        if hasattr(self.ui, 'tips_checkbox_corr'):
+            widgets_to_toggle.append(self.ui.tips_checkbox_corr)
+
         self.ui.set_widgets_state(widgets_to_toggle, new_state)
 
     def _enter_text_edit_mode(self, segment_id_to_edit: str):
+        # ... (rest of the method remains the same, but ensure tips checkbox is disabled)
         if self.is_any_edit_mode_active(): self._exit_all_edit_modes(save_changes=True)
 
         target_segment = self.segment_manager.get_segment_by_id(segment_id_to_edit)
@@ -540,7 +623,7 @@ class CorrectionWindow:
         self.text_content_start_index_in_edit = None 
         
         self.ui.transcription_text.config(state=tk.NORMAL)
-        self._toggle_global_ui_for_edit_mode(disable=True)
+        self._toggle_global_ui_for_edit_mode(disable=True) # This will now disable tips checkbox
         
         text_tag_id = target_segment.get("text_tag_id")
         if not text_tag_id:
@@ -558,20 +641,15 @@ class CorrectionWindow:
             
             current_text_in_widget = self.ui.transcription_text.get(edit_start_index, edit_end_index)
             
-            # If current text is placeholder, clear it for editing
             if current_text_in_widget == constants.EMPTY_SEGMENT_PLACEHOLDER:
                 self.ui.transcription_text.delete(edit_start_index, edit_end_index)
-                # The text_tag_id now effectively becomes zero-length at edit_start_index
-                # We'll re-apply it if necessary, or just use edit_start_index as the known start
-                edit_end_index = edit_start_index # Update end_index for styling the (now empty) spot
+                edit_end_index = edit_start_index 
 
-            # Remove previous style tags from the precise range
             self.ui.transcription_text.tag_remove("placeholder_text_style", edit_start_index, edit_end_index)
             self.ui.transcription_text.tag_remove("inactive_text_default", edit_start_index, edit_end_index)
-            # Apply editing style to the precise range (which is zero-length if placeholder was just deleted)
             self.ui.transcription_text.tag_add("editing_active_segment_text", edit_start_index, edit_end_index) 
             
-            self.text_content_start_index_in_edit = edit_start_index # Store the precise Tkinter index
+            self.text_content_start_index_in_edit = edit_start_index 
             
             self.ui.transcription_text.focus_set()
             self.ui.transcription_text.mark_set(tk.INSERT, edit_start_index) 
@@ -586,7 +664,9 @@ class CorrectionWindow:
         else: self.ui.jump_to_segment_button.pack_forget()
         logger.info(f"Entered text edit mode for segment: {self.editing_segment_id}")
 
+
     def _exit_text_edit_mode(self, save_changes: bool = True):
+        # ... (rest of the method remains the same, but ensure tips checkbox is re-enabled by _toggle_global_ui_for_edit_mode)
         if not self.text_edit_mode_active or not self.editing_segment_id:
             return
         
@@ -595,23 +675,16 @@ class CorrectionWindow:
         original_segment_obj = self.segment_manager.get_segment_by_id(self.editing_segment_id) 
 
         if save_changes and original_segment_obj:
-            # Use the stored self.text_content_start_index_in_edit as the definitive start
             true_start_of_text_content = self.text_content_start_index_in_edit
             
             if true_start_of_text_content:
                 try:
-                    # Get text from this known start to the end of its line in the widget
                     text_content_end_index_on_line = self.ui.transcription_text.index(f"{true_start_of_text_content} lineend")
                     modified_text = self.ui.transcription_text.get(true_start_of_text_content, text_content_end_index_on_line).strip()
                     
                     logger.debug(f"Retrieved modified text for {self.editing_segment_id} from {true_start_of_text_content} to {text_content_end_index_on_line}: '{modified_text}'")
 
-                    # If the user typed the placeholder text, or if it's empty, save as ""
-                    if modified_text == constants.EMPTY_SEGMENT_PLACEHOLDER or not modified_text:
-                        final_text_to_save = ""
-                        logger.debug("Modified text is placeholder or empty, will save as empty string.")
-                    else:
-                        final_text_to_save = modified_text
+                    final_text_to_save = "" if modified_text == constants.EMPTY_SEGMENT_PLACEHOLDER or not modified_text else modified_text
                     
                     if self.segment_manager.update_segment_text(self.editing_segment_id, final_text_to_save):
                         text_updated = True
@@ -624,8 +697,6 @@ class CorrectionWindow:
             else:
                 logger.warning(f"Segment {self.editing_segment_id} missing cached start_index_in_edit on exit. Cannot reliably save text.")
         
-        # Clean up UI tag "editing_active_segment_text".
-        # The subsequent _render_segments_to_text_area will apply correct default/placeholder styles.
         try:
             self.ui.transcription_text.tag_remove("editing_active_segment_text", "1.0", tk.END)
         except tk.TclError:
@@ -633,21 +704,22 @@ class CorrectionWindow:
 
 
         self.ui.jump_to_segment_button.pack_forget()
-        self._toggle_global_ui_for_edit_mode(disable=False) 
+        self._toggle_global_ui_for_edit_mode(disable=False) # This re-enables tips checkbox
         
         editing_segment_id_before_clear = self.editing_segment_id 
         self.text_edit_mode_active = False
         self.editing_segment_id = None
-        self.text_content_start_index_in_edit = None # Clear the stored index
+        self.text_content_start_index_in_edit = None 
         
         logger.info(f"Exited text edit mode for segment {editing_segment_id_before_clear}. Text updated status: {text_updated}")
         
-        self._render_segments_to_text_area() # Always re-render to reflect placeholder or actual text
+        self._render_segments_to_text_area() 
         if editing_segment_id_before_clear:
             self._scroll_to_segment_if_visible(editing_segment_id_before_clear)
 
 
     def _enter_timestamp_edit_mode(self, segment_id_to_edit_ts: str):
+        # ... (rest of the method remains the same, but ensure tips checkbox is disabled)
         if self.is_any_edit_mode_active(): self._exit_all_edit_modes(save_changes=True)
 
         target_segment = self.segment_manager.get_segment_by_id(segment_id_to_edit_ts)
@@ -655,7 +727,7 @@ class CorrectionWindow:
 
         self.timestamp_edit_mode_active = True
         self.editing_segment_id_for_ts = segment_id_to_edit_ts
-        self._toggle_global_ui_for_edit_mode(disable=True) 
+        self._toggle_global_ui_for_edit_mode(disable=True) # This will now disable tips checkbox
 
         ts_tag_id = target_segment.get("timestamp_tag_id") 
         if ts_tag_id:
@@ -670,14 +742,16 @@ class CorrectionWindow:
         else: self.ui.jump_to_segment_button.pack_forget()
 
         logger.info(f"Entered timestamp edit mode for segment: {self.editing_segment_id_for_ts}")
-        self._edit_segment_timestamps_dialog_logic(segment_id_to_edit_ts) 
+        self._edit_segment_timestamps_dialog_logic(segment_id_to_edit_ts)
 
-    def _exit_timestamp_edit_mode(self, save_changes: bool): 
+
+    def _exit_timestamp_edit_mode(self, save_changes: bool):
+        # ... (rest of the method, ensure tips checkbox re-enabled by _toggle_global_ui_for_edit_mode)
         if not self.timestamp_edit_mode_active or not self.editing_segment_id_for_ts: return
 
         logger.info(f"Exiting timestamp edit mode for segment: {self.editing_segment_id_for_ts}. Save flag from dialog: {save_changes}")
         
-        editing_segment_id_for_ts_before_clear = self.editing_segment_id_for_ts # Store before clearing
+        editing_segment_id_for_ts_before_clear = self.editing_segment_id_for_ts 
         
         segment_exited = self.segment_manager.get_segment_by_id(editing_segment_id_for_ts_before_clear)
         if segment_exited:
@@ -688,24 +762,22 @@ class CorrectionWindow:
                 except tk.TclError: pass
         
         self.ui.jump_to_segment_button.pack_forget()
-        self._toggle_global_ui_for_edit_mode(disable=False) 
+        self._toggle_global_ui_for_edit_mode(disable=False) # This re-enables tips checkbox
         
         self.timestamp_edit_mode_active = False
         self.editing_segment_id_for_ts = None
         
         logger.info(f"Exited timestamp edit mode for {editing_segment_id_for_ts_before_clear}.")
         
-        # Re-render if dialog was cancelled (save_changes=False) or if OK but no data change (render in dialog handles data change)
-        # To be safe and ensure consistent UI (e.g. highlight removal):
-        if not save_changes: # If dialog was cancelled or closed via 'X'
+        if not save_changes: 
             self._render_segments_to_text_area()
         
-        # Always try to scroll, _render_segments_to_text_area might have been called by dialog's OK
         if editing_segment_id_for_ts_before_clear:
              self._scroll_to_segment_if_visible(editing_segment_id_for_ts_before_clear)
 
 
     def _get_segment_id_from_text_index(self, text_index_str: str) -> str | None:
+        # ... (method remains the same)
         tags_at_index = self.ui.transcription_text.tag_names(text_index_str)
         for tag_prefix in ["text_content_seg_", "ts_content_seg_"]:
             for tag in tags_at_index:
@@ -722,6 +794,7 @@ class CorrectionWindow:
         return None
 
     def _poll_audio_player_queue(self):
+        # ... (method remains the same)
         if self.audio_player_update_queue:
             try:
                 while not self.audio_player_update_queue.empty():
@@ -756,6 +829,7 @@ class CorrectionWindow:
         if hasattr(self, 'window') and self.window.winfo_exists(): self.window.after(50, self._poll_audio_player_queue) 
 
     def _toggle_play_pause(self):
+        # ... (method remains the same)
         if not self.audio_player or not self.audio_player.is_ready(): 
             msg = "Audio player not ready." if self.ui.get_audio_file_path() and os.path.exists(self.ui.get_audio_file_path()) else "Please load an audio file."
             messagebox.showinfo("Audio Not Ready", msg, parent=self.window); return
@@ -763,15 +837,18 @@ class CorrectionWindow:
         else: self.audio_player.play() 
 
     def _seek_audio(self, delta_seconds):
+        # ... (method remains the same)
         if not self.audio_player or not self.audio_player.is_ready() or self.audio_player.frame_rate <= 0: return
         target_frame = int((self.audio_player.current_frame / self.audio_player.frame_rate + delta_seconds) * self.audio_player.frame_rate)
         self.audio_player.set_pos_frames(target_frame) 
 
-    def _on_progress_bar_seek(self, value_str: str): 
+    def _on_progress_bar_seek(self, value_str: str):
+        # ... (method remains the same)
         if not self.audio_player or not self.audio_player.is_ready() or self.audio_player.frame_rate <= 0: return
         self.audio_player.set_pos_frames(int(float(value_str) * self.audio_player.frame_rate)) 
 
-    def _update_time_labels_display(self): 
+    def _update_time_labels_display(self):
+        # ... (method remains the same)
         if not self.audio_player or not self.audio_player.is_ready() or self.audio_player.frame_rate <= 0:
             self.ui.update_time_labels_display("--:--.---", "--:--.---"); return
         current_s = self.audio_player.current_frame / self.audio_player.frame_rate
@@ -780,6 +857,7 @@ class CorrectionWindow:
                                            self.segment_manager.seconds_to_time_str(total_s))
 
     def _highlight_current_segment(self, current_playback_seconds: float):
+        # ... (method remains the same)
         if self.is_any_edit_mode_active(): return 
         newly_highlighted_id = None
         for i, seg in enumerate(self.segment_manager.segments):
@@ -811,7 +889,9 @@ class CorrectionWindow:
                 if new_seg: self._apply_text_highlight(new_seg.get("text_tag_id"), active=True, scroll_to=True)
             self.currently_highlighted_text_seg_id = newly_highlighted_id
 
+
     def _apply_text_highlight(self, text_tag_id: str | None, active: bool, scroll_to: bool = False):
+        # ... (method remains the same)
         if not text_tag_id: return 
         try:
             ranges = self.ui.transcription_text.tag_ranges(text_tag_id)
@@ -823,14 +903,13 @@ class CorrectionWindow:
                 current_text_in_widget = self.ui.transcription_text.get(ranges[0], ranges[1])
                 is_placeholder = (current_text_in_widget == constants.EMPTY_SEGMENT_PLACEHOLDER)
 
-                # Remove all potentially conflicting style tags first
                 self.ui.transcription_text.tag_remove(active_tag, ranges[0], ranges[1])
                 self.ui.transcription_text.tag_remove(inactive_tag, ranges[0], ranges[1])
                 self.ui.transcription_text.tag_remove(placeholder_tag, ranges[0], ranges[1])
 
                 if active:
                     self.ui.transcription_text.tag_add(active_tag, ranges[0], ranges[1])
-                else: # Deactivating
+                else: 
                     if is_placeholder:
                          self.ui.transcription_text.tag_add(placeholder_tag, ranges[0], ranges[1])
                     else:
@@ -841,7 +920,8 @@ class CorrectionWindow:
             logger.warning(f"TclError applying highlight for tag {text_tag_id}. Tag might not exist or range is invalid.")
             pass 
 
-    def _jump_to_segment_start_action(self): 
+    def _jump_to_segment_start_action(self):
+        # ... (method remains the same)
         segment_id_to_jump = self.editing_segment_id if self.text_edit_mode_active else self.editing_segment_id_for_ts
         if not segment_id_to_jump: return
 
@@ -853,6 +933,7 @@ class CorrectionWindow:
         if self.audio_player.frame_rate > 0: self.audio_player.set_pos_frames(int(target_time * self.audio_player.frame_rate))
 
     def _handle_audio_player_error(self, error_message):
+        # ... (method remains the same)
         logger.error(f"AudioPlayer reported error: {error_message}")
         messagebox.showerror("Audio Player Error", error_message, parent=self.window)
         self._disable_audio_controls()
@@ -861,12 +942,15 @@ class CorrectionWindow:
 
     def _disable_audio_controls(self):
         widgets = [self.ui.play_pause_button, self.ui.rewind_button, self.ui.forward_button, self.ui.audio_progress_bar]
+        if hasattr(self.ui, 'tips_checkbox_corr'): # Also disable tips checkbox
+            widgets.append(self.ui.tips_checkbox_corr)
         self.ui.set_widgets_state(widgets, tk.DISABLED)
         self.ui.update_audio_progress_bar_display(0)
         if hasattr(self.ui, 'jump_to_segment_button') and self.ui.jump_to_segment_button.winfo_exists():
             self.ui.jump_to_segment_button.pack_forget()
 
     def _center_dialog(self, dialog_window, min_width=300, base_height=200, height_per_item=30, num_items=0):
+        # ... (method remains the same)
         dialog_window.update_idletasks() 
         desired_height = base_height + (num_items * height_per_item)
         max_dialog_height = int(self.window.winfo_height() * 0.8)
@@ -891,6 +975,7 @@ class CorrectionWindow:
         dialog_window.lift()
 
     def _scroll_to_segment_if_visible(self, segment_id: str):
+        # ... (method remains the same)
         segment_to_see = self.segment_manager.get_segment_by_id(segment_id)
         if segment_to_see:
             line_id_tag = segment_to_see.get("id") 
@@ -920,6 +1005,7 @@ class CorrectionWindow:
     def _on_close(self):
         logger.info("CorrectionWindow: Close requested.")
         if self.is_any_edit_mode_active():
+            # ... (rest of the conditions remain the same)
             if self.timestamp_edit_mode_active and self.timestamp_edit_dialog_instance:
                 if not messagebox.askyesno("Unsaved Edit", "You are currently editing timestamps. Exiting now will discard these changes. Are you sure?", parent=self.window, icon=messagebox.WARNING):
                     return
@@ -929,20 +1015,25 @@ class CorrectionWindow:
                     return
                 self._exit_text_edit_mode(save_changes=False)
         
-        self._exit_all_edit_modes(save_changes=False) 
+        self._exit_all_edit_modes(save_changes=False)
 
-        if self.audio_player: 
+        # Unbind all tooltips before closing
+        for widget, tooltip_instance in list(self.tips_widgets_corr.items()):
+            tooltip_instance.unbind()
+        self.tips_widgets_corr.clear()
+
+        if self.audio_player:
             logger.debug("CorrectionWindow: Stopping audio player resources on close.")
-            self.audio_player.stop_resources() 
-        self.audio_player = None 
-        self.audio_player_update_queue = None 
+            self.audio_player.stop_resources()
+        self.audio_player = None
+        self.audio_player_update_queue = None
 
-        try: 
+        try:
             if hasattr(self, 'window') and self.window.winfo_exists():
-                 self.window.unbind_all("<MouseWheel>") 
-        except tk.TclError: pass 
+                 self.window.unbind_all("<MouseWheel>")
+        except tk.TclError: pass
 
         logger.debug("CorrectionWindow: Destroying window.")
-        if hasattr(self, 'window') and self.window.winfo_exists(): 
+        if hasattr(self, 'window') and self.window.winfo_exists():
             self.window.destroy()
 
