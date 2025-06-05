@@ -531,15 +531,17 @@ class CorrectionWindow:
 
 
     def _render_segments_to_text_area(self):
-        # ... (rest of the method remains the same)
+        # Ensure any active edit mode is exited before re-rendering.
+        # It's important not to save changes here if the re-render is due to something
+        # other than explicit save action (e.g., speaker assignment, load files).
         if self.text_edit_mode_active:
-             self._exit_text_edit_mode(save_changes=False) 
+             self._exit_text_edit_mode(save_changes=False) # Don't save, just exit mode
         if self.timestamp_edit_mode_active:
-             self._exit_timestamp_edit_mode(save_changes=False) 
+             self._exit_timestamp_edit_mode(save_changes=False) # Don't save, just exit mode
         
         self.ui.transcription_text.config(state=tk.NORMAL)
         self.ui.transcription_text.delete("1.0", tk.END)
-        self.currently_highlighted_text_seg_id = None 
+        self.currently_highlighted_text_seg_id = None # Reset highlight tracking
         
         if not self.segment_manager.segments:
             self.ui.transcription_text.insert(tk.END, "No transcription data loaded or all lines were unparsable.")
@@ -547,52 +549,71 @@ class CorrectionWindow:
             return
         
         for idx, seg in enumerate(self.segment_manager.segments):
-            line_start_idx_str = self.ui.transcription_text.index(tk.END + "-1c linestart") 
+            line_start_idx_str = self.ui.transcription_text.index(tk.END + "-1c linestart") # Get start of current line
             
+            # Determine segment properties
             has_ts = seg.get("has_timestamps", False)
             has_explicit_end = seg.get("has_explicit_end_time", False)
             has_speaker = seg['speaker_raw'] != constants.NO_SPEAKER_LABEL
             display_speaker = self.segment_manager.speaker_map.get(seg['speaker_raw'], seg['speaker_raw']) if has_speaker else ""
             
-            prefix, merge_tuple = "  ", ()
-            if idx > 0 and has_speaker and self.segment_manager.segments[idx-1].get("speaker_raw") == seg["speaker_raw"] and seg['speaker_raw'] != constants.NO_SPEAKER_LABEL:
-                prefix, merge_tuple = "+ ", ("merge_tag_style", seg['id']) 
+            # --- Merge Symbol Handling ---
+            prefix, merge_tuple = "  ", () # Default prefix
+            # Check if merge symbol should be shown (current and previous segment have same, valid speaker)
+            if idx > 0 and has_speaker and \
+               self.segment_manager.segments[idx-1].get("speaker_raw") == seg["speaker_raw"] and \
+               seg['speaker_raw'] != constants.NO_SPEAKER_LABEL:
+                prefix, merge_tuple = "+ ", ("merge_tag_style", seg['id']) # Use segment ID for merge tag
+            # If no timestamp and no speaker, no prefix (plain text line)
             if not has_ts and not has_speaker: prefix = ""; merge_tuple = () 
             self.ui.transcription_text.insert(tk.END, prefix, merge_tuple)
             
-            ts_area_start_idx_str = self.ui.transcription_text.index(tk.END) 
-            ts_tag_for_double_click = seg.get("timestamp_tag_id") 
+            # --- Timestamp Area Rendering ---
+            ts_area_start_idx_str = self.ui.transcription_text.index(tk.END) # Mark start of TS display area
+            ts_tag_for_double_click = seg.get("timestamp_tag_id") # Unique tag for this segment's TS area
 
             if has_ts:
                 start_str = self.segment_manager.seconds_to_time_str(seg['start_time'])
-                ts_str_display = f"[{start_str} - {self.segment_manager.seconds_to_time_str(seg['end_time'])}] " if has_explicit_end and seg['end_time'] is not None else f"[{start_str}] "
+                if has_explicit_end and seg['end_time'] is not None:
+                    ts_str_display = f"[{start_str} - {self.segment_manager.seconds_to_time_str(seg['end_time'])}] "
+                else: 
+                    ts_str_display = f"[{start_str}] "
+                # Apply tags for styling and for double-clickability (ts_tag_for_double_click)
                 self.ui.transcription_text.insert(tk.END, ts_str_display, ("timestamp_tag_style", seg['id'], ts_tag_for_double_click))
-            elif has_speaker: 
-                self.ui.transcription_text.insert(tk.END, "[No Timestamps] ", ("no_timestamp_tag_style", seg['id'], ts_tag_for_double_click))
+            # elif has_speaker: # MODIFIED: Removed this block to prevent "[No Timestamps]"
+            #    # self.ui.transcription_text.insert(tk.END, "[No Timestamps] ", ("no_timestamp_tag_style", seg['id'], ts_tag_for_double_click))
+            #    pass # Do not insert "[No Timestamps]". The area will be blank but still clickable due to ts_tag_for_double_click below.
             
-            ts_area_end_idx_str = self.ui.transcription_text.index(tk.END)
+            ts_area_end_idx_str = self.ui.transcription_text.index(tk.END) # Mark end of TS display area
+            # Ensure the ts_tag_for_double_click is applied to the range where TS *would be*, even if blank.
+            # This makes the empty space clickable if has_speaker is true but has_ts is false.
             if ts_tag_for_double_click: 
                  self.ui.transcription_text.tag_add(ts_tag_for_double_click, ts_area_start_idx_str, ts_area_end_idx_str)
 
+            # --- Speaker Rendering ---
             if has_speaker:
                 self.ui.transcription_text.insert(tk.END, display_speaker, ("speaker_tag_style", seg['id']))
                 self.ui.transcription_text.insert(tk.END, ": ")
             
+            # --- Text Content Rendering ---
             text_to_display = seg['text']
-            current_text_tags = ["inactive_text_default", seg.get("text_tag_id")] 
+            current_text_tags = ["inactive_text_default", seg.get("text_tag_id")] # Default tags for text
 
-            if not text_to_display: 
+            if not text_to_display: # If text is empty, use placeholder
                 text_to_display = constants.EMPTY_SEGMENT_PLACEHOLDER
-                current_text_tags = ["placeholder_text_style", seg.get("text_tag_id")] 
+                current_text_tags = ["placeholder_text_style", seg.get("text_tag_id")] # Use placeholder style
 
+            # Insert text content with its unique tag for double-click editing
             text_content_actual_start_idx_str = self.ui.transcription_text.index(tk.END) 
-            self.ui.transcription_text.insert(tk.END, text_to_display, tuple(filter(None, current_text_tags))) 
+            self.ui.transcription_text.insert(tk.END, text_to_display, tuple(filter(None, current_text_tags))) # Filter out None tags
             text_content_actual_end_idx_str = self.ui.transcription_text.index(tk.END)
 
-            if seg.get("text_tag_id"): 
+            # Apply the text_tag_id to the actual text content range
+            if seg.get("text_tag_id"): # text_tag_id is like "text_content_seg_XYZ"
                  self.ui.transcription_text.tag_add(seg.get("text_tag_id"), text_content_actual_start_idx_str, text_content_actual_end_idx_str)
 
-            self.ui.transcription_text.insert(tk.END, "\n")
+            self.ui.transcription_text.insert(tk.END, "\n") # Newline after each segment
+            # Add a tag that covers the entire line for background highlighting or right-click context
             self.ui.transcription_text.tag_add(seg['id'], line_start_idx_str, self.ui.transcription_text.index(tk.END + "-1c lineend"))
             
         self.ui.transcription_text.config(state=tk.DISABLED)
