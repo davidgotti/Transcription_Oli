@@ -846,3 +846,6 @@ if __name__ == "__main__":
     main_app_root.after(150, lambda: app.start_initialization_sequence(launch_screen))
 
     main_app_root.mainloop()
+
+
+
