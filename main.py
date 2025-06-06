@@ -6,7 +6,15 @@ import queue # Ensure queue is imported
 import logging
 import os
 import multiprocessing
-# import datetime # Not currently used, can be removed if not needed elsewhere
+# --- New code to add the bundled ffmpeg to the PATH ---
+if getattr(sys, 'frozen', False):
+    # This checks if the app is running in a bundled environment (e.g., from PyInstaller)
+    bundle_dir = sys._MEIPASS
+    # The path to the 'bin' directory containing ffmpeg
+    ffmpeg_path = os.path.join(bundle_dir, 'bin')
+    # Add this path to the OS's PATH environment variable
+    os.environ["PATH"] += os.pathsep + ffmpeg_path
+# -------------------------------------------------------------
 
 from utils import constants
 from utils.logging_setup import setup_logging
