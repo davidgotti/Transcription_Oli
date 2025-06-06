@@ -303,9 +303,9 @@ class MainApp:
                         initial_auto_merge_enabled_from_ui=current_auto_merge
                     )
                     # Feedback about diarization model status after re-init
-                    if self.audio_processor and self.audio_processor.enable_diarization and \
-                       self.audio_processor.diarization_handler and \
-                       self.audio_processor.diarization_handler.is_model_loaded():
+                    if self.audio_processor and self.audio_processor.output_enable_diarization and \
+                        self.audio_processor.diarization_handler and \
+                        self.audio_processor.diarization_handler.is_model_loaded():
                         self.ui_update_queue.put({
                             "type": constants.MSG_TYPE_STATUS,
                             "text": "Diarization model ready with new token."
