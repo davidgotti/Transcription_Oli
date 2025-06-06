@@ -143,12 +143,15 @@ class CorrectionWindowUI:
     def __init__(self, parent_tk_window,
                  browse_transcription_callback, browse_audio_callback,
                  load_files_callback, assign_speakers_callback, save_changes_callback,
-                 toggle_play_pause_callback, seek_audio_callback, on_progress_bar_seek_callback,
+                 toggle_play_pause_callback, seek_audio_callback, # REMOVED: on_progress_bar_seek_callback
                  jump_to_segment_start_callback,
                  text_area_double_click_callback, text_area_right_click_callback, text_area_left_click_edit_mode_callback,
                  on_speaker_click_callback, on_merge_click_callback,
                  # Add show_tips_var and its command from CorrectionWindow
-                 show_tips_var_ref, toggle_tips_callback_ref
+                 show_tips_var_ref, toggle_tips_callback_ref,
+                 # NEW Callbacks for timestamp editing buttons
+                 on_save_start_time_callback, on_toggle_end_time_callback,
+                 on_save_times_callback, on_cancel_timestamp_edit_callback
                  ):
         """
         Initializes and lays out the UI elements for the CorrectionWindow.
@@ -161,7 +164,7 @@ class CorrectionWindowUI:
         # --- StringVars for Entry fields ---
         self.transcription_file_path_var = tk.StringVar()
         self.audio_file_path_var = tk.StringVar()
-        self.audio_progress_var = tk.DoubleVar()
+        # self.audio_progress_var = tk.DoubleVar() # REMOVED: No longer using ttk.Scale for progress
 
         # --- Colors and Styles ---
         self.text_area_font_family = 'Helvetica'
@@ -176,26 +179,34 @@ class CorrectionWindowUI:
         self.timestamp_fg_color = "#555555"
         self.active_highlight_bg = "yellow"
         self.active_highlight_fg = "black"
-        self.editing_timestamp_bg_color = "lightblue"
+        self.editing_timestamp_bg_color = "lightblue" # Can be used for canvas elements too
         self.placeholder_text_fg_color = "grey"
 
+        # Colors for new draggable bars on canvas
+        self.start_bar_color = "blue"
+        self.end_bar_color = "green"
+        self.main_playback_bar_color = "red"
+        self.timeline_bg_color = "#DDDDDD" # Background for the canvas timeline area
+        self.draggable_bar_width = 3 # Pixel width for draggable bars
+        self.main_playback_bar_width = 2 # Pixel width for main playback bar
+
         # --- Main layout ---
-        main_container_frame = ttk.Frame(self.window, padding="5") # Reduced padding slightly
+        main_container_frame = ttk.Frame(self.window, padding="5")
         main_container_frame.pack(expand=True, fill=tk.BOTH)
 
         # --- Header Frame for Tips Checkbox ---
         header_frame_corr = ttk.Frame(main_container_frame)
         header_frame_corr.pack(fill=tk.X, side=tk.TOP, pady=(0, 5))
-        header_frame_corr.columnconfigure(0, weight=1) # Make left cell expand
+        header_frame_corr.columnconfigure(0, weight=1) 
 
         self.tips_checkbox_corr = ttk.Checkbutton(
             header_frame_corr,
             text="Show Tips",
-            variable=show_tips_var_ref, # Use the BooleanVar from CorrectionWindow
-            command=toggle_tips_callback_ref # Call method in CorrectionWindow
+            variable=show_tips_var_ref, 
+            command=toggle_tips_callback_ref 
         )
         self.tips_checkbox_corr.pack(side=tk.RIGHT, padx=5)
-        # The actual tooltip for this checkbox will be managed by CorrectionWindow class
+        
 
         # --- Top Controls Frame (File Browse, Load, Assign, Save) ---
         top_controls_frame = ttk.Frame(main_container_frame)
@@ -227,23 +238,65 @@ class CorrectionWindowUI:
         top_controls_frame.columnconfigure(4, minsize=120)
 
         # --- Audio Controls Frame ---
-        audio_controls_frame = ttk.Frame(main_container_frame)
-        audio_controls_frame.pack(fill=tk.X, side=tk.TOP, pady=(0,5))
+        # This frame will now contain the standard playback buttons, the new canvas,
+        # and a sub-frame for the new timestamp editing buttons/labels that can be shown/hidden.
+        audio_controls_outer_frame = ttk.Frame(main_container_frame)
+        audio_controls_outer_frame.pack(fill=tk.X, side=tk.TOP, pady=(0,5))
 
-        self.play_pause_button = ttk.Button(audio_controls_frame, text="Play", command=toggle_play_pause_callback, state=tk.DISABLED)
+        # Sub-frame for standard playback controls and the timeline canvas
+        standard_playback_and_canvas_frame = ttk.Frame(audio_controls_outer_frame)
+        standard_playback_and_canvas_frame.pack(fill=tk.X, pady=(0,2)) # Reduced bottom padding
+
+        self.play_pause_button = ttk.Button(standard_playback_and_canvas_frame, text="Play", command=toggle_play_pause_callback, state=tk.DISABLED)
         self.play_pause_button.pack(side=tk.LEFT, padx=2)
-        self.rewind_button = ttk.Button(audio_controls_frame, text="<< 5s", command=lambda: seek_audio_callback(-5), state=tk.DISABLED)
+        self.rewind_button = ttk.Button(standard_playback_and_canvas_frame, text="<< 5s", command=lambda: seek_audio_callback(-5), state=tk.DISABLED)
         self.rewind_button.pack(side=tk.LEFT, padx=2)
-        self.forward_button = ttk.Button(audio_controls_frame, text="5s >>", command=lambda: seek_audio_callback(5), state=tk.DISABLED)
+        self.forward_button = ttk.Button(standard_playback_and_canvas_frame, text="5s >>", command=lambda: seek_audio_callback(5), state=tk.DISABLED)
         self.forward_button.pack(side=tk.LEFT, padx=2)
         
-        self.jump_to_segment_button = ttk.Button(audio_controls_frame, text="|< Jump to Seg Start (-1s)", command=jump_to_segment_start_callback)
-        # Not packed initially, shown/hidden by CorrectionWindow logic
+        self.jump_to_segment_button = ttk.Button(standard_playback_and_canvas_frame, text="|< Jump to Seg Start (-1s)", command=jump_to_segment_start_callback)
+        # Not packed initially, shown/hidden by CorrectionWindow logic. It used to be packed before audio_progress_bar.
+        # Now it can be packed by CorrectionWindow when text edit mode is active next to the canvas or other relevant place.
         
-        self.audio_progress_bar = ttk.Scale(audio_controls_frame, orient=tk.HORIZONTAL, from_=0, to=100, variable=self.audio_progress_var, command=on_progress_bar_seek_callback, state=tk.DISABLED)
-        self.audio_progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.current_time_label = ttk.Label(audio_controls_frame, text="00:00.000 / 00:00.000")
+        # NEW: Audio Timeline Canvas (replaces ttk.Scale)
+        # Define a reasonable height for the canvas to draw the timeline and markers
+        self.audio_timeline_canvas_height = 40 # pixels
+        self.audio_timeline_canvas = tk.Canvas(standard_playback_and_canvas_frame, height=self.audio_timeline_canvas_height, bg=self.timeline_bg_color, highlightthickness=0)
+        self.audio_timeline_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        # Event bindings for this canvas (<Button-1>, <B1-Motion>, etc.) will be done in CorrectionWindow
+
+        self.current_time_label = ttk.Label(standard_playback_and_canvas_frame, text="00:00.000 / 00:00.000")
         self.current_time_label.pack(side=tk.LEFT, padx=5)
+
+        # NEW: Frame for timestamp editing controls (buttons and labels under bars)
+        # This frame will be packed/unpacked by CorrectionWindow logic below the canvas or wherever appropriate.
+        self.timestamp_edit_controls_frame = ttk.Frame(audio_controls_outer_frame)
+        # Do not pack it here initially. CorrectionWindow will pack it when needed (e.g., below standard_playback_and_canvas_frame).
+
+        # Labels to show time under draggable bars. These will be packed into timestamp_edit_controls_frame.
+        # Their exact positioning relative to the canvas (above them) will be managed by how CorrectionWindow packs this frame
+        # and potentially by adding spacer labels or specific grid layouts within timestamp_edit_controls_frame.
+        self.timestamp_start_time_label = ttk.Label(self.timestamp_edit_controls_frame, text="Start: 00:00.000", foreground=self.start_bar_color)
+        self.timestamp_start_time_label.pack(side=tk.LEFT, padx=(5,15), pady=2) 
+
+        self.timestamp_end_time_label = ttk.Label(self.timestamp_edit_controls_frame, text="End: 00:00.000", foreground=self.end_bar_color)
+        # self.timestamp_end_time_label.pack(side=tk.LEFT, padx=(0,15), pady=2) # Packed by CW when visible
+
+        # Buttons for timestamp editing - also packed into timestamp_edit_controls_frame
+        # Their order might be important.
+        self.save_start_time_button = ttk.Button(self.timestamp_edit_controls_frame, text="Save Start", command=on_save_start_time_callback)
+        # self.save_start_time_button.pack(side=tk.LEFT, padx=5, pady=2) # Packed by CW
+
+        self.toggle_end_time_var = tk.BooleanVar(value=False) 
+        self.toggle_end_time_button = ttk.Checkbutton(self.timestamp_edit_controls_frame, text="Set End Time", variable=self.toggle_end_time_var, command=on_toggle_end_time_callback)
+        # self.toggle_end_time_button.pack(side=tk.LEFT, padx=5, pady=2) # Packed by CW
+
+        self.save_times_button = ttk.Button(self.timestamp_edit_controls_frame, text="Save Start & End", command=on_save_times_callback)
+        # self.save_times_button.pack(side=tk.LEFT, padx=5, pady=2) # Packed by CW
+        
+        # Add a spacer or use a different frame for cancel if it needs to be on the right
+        self.cancel_timestamp_edit_button = ttk.Button(self.timestamp_edit_controls_frame, text="Cancel Edit", command=on_cancel_timestamp_edit_callback)
+        # self.cancel_timestamp_edit_button.pack(side=tk.RIGHT, padx=5, pady=2) # Example packing, might be last
 
         # --- Transcription Text Area ---
         text_area_frame = ttk.Frame(main_container_frame)
@@ -272,7 +325,7 @@ class CorrectionWindowUI:
 
         self.transcription_text.config(state=tk.DISABLED)
 
-        logger.info("CorrectionWindowUI elements created with tips checkbox placeholder.")
+        logger.info("CorrectionWindowUI elements created with new canvas and timestamp edit controls.")
 
     def _configure_text_tags(self):
         """Configures all necessary tags for the transcription text area."""
@@ -296,19 +349,31 @@ class CorrectionWindowUI:
             self.play_pause_button.config(text=text)
 
     def update_time_labels_display(self, current_time_str: str, total_time_str: str):
+        """Updates the main current/total time display next to the canvas."""
         if hasattr(self, 'current_time_label') and self.current_time_label.winfo_exists():
             self.current_time_label.config(text=f"{current_time_str} / {total_time_str}")
+    
+    def update_specific_timestamp_label(self, label_widget: ttk.Label, prefix: str, time_str: str):
+        """Updates specific labels like those under draggable bars."""
+        if label_widget and hasattr(label_widget, 'winfo_exists') and label_widget.winfo_exists():
+            label_widget.config(text=f"{prefix}: {time_str}")
+
 
     def update_audio_progress_bar_display(self, value: float, max_value: float | None = None):
-        if hasattr(self, 'audio_progress_bar') and self.audio_progress_bar.winfo_exists():
-            if max_value is not None:
-                 self.audio_progress_bar.config(to=max_value)
-            self.audio_progress_var.set(value)
+        """
+        This method is now effectively OBSOLETE for direct progress bar update
+        as the ttk.Scale has been replaced by a tk.Canvas.
+        The canvas will be drawn by CorrectionWindow logic.
+        This method can be removed or repurposed if there's a new variable to set.
+        For now, we'll make it a no-op to avoid errors if called.
+        """
+        # logger.debug(f"CorrectionWindowUI.update_audio_progress_bar_display called (now Canvas): V={value}, Max={max_value}")
+        pass # ttk.Scale no longer exists
 
     def set_widgets_state(self, widgets: list, state: str):
         for widget in widgets:
             if widget and hasattr(widget, 'winfo_exists') and widget.winfo_exists():
-                try: # Add try-except for robustness, especially if tips_checkbox might not be ready
+                try: 
                     widget.config(state=state)
                 except tk.TclError:
                     logger.warning(f"Could not set state for widget {widget}. It might be during teardown.")
