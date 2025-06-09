@@ -5,6 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 import queue # Ensure queue is imported
 import logging
 import os
+import sys
 import multiprocessing
 # --- New code to add the bundled ffmpeg to the PATH ---
 if getattr(sys, 'frozen', False):
