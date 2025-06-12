@@ -24,7 +24,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='TranscriptionOli',
+    name='Transcription_dev_test'',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
