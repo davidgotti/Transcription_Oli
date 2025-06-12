@@ -31,7 +31,7 @@ MANIFEST
 #  Usually these files are written by a PyInstaller script; this is targeted
 #  at files common to PyInstaller builds.
 *.manifest
-*.spec
+
 
 # Installer logs
 pip-log.txt
