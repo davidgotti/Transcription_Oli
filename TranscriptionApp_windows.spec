@@ -40,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='TranscriptionOli',
+    name='Transcription_dev_test',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
