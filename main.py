@@ -14,9 +14,6 @@ if getattr(sys, 'frozen', False):
     from functools import partial
     # Replace the main tqdm class with a version where the output file is null
     tqdm = partial(tqdm, file=open(os.devnull, 'w'))
-    # You could also completely disable it, but this is safer:
-    # from unittest.mock import MagicMock
-    # sys.modules['tqdm'] = MagicMock()
 
 # --- FIX FOR VIRTUAL MACHINE FILE SYSTEM ISSUES ---
 # Set a dedicated cache directory for the Whisper model.
@@ -28,7 +25,6 @@ if sys.platform == "win32" and not os.path.exists(cache_dir_path):
     except OSError:
         # Fallback if C: drive is not writable, though unlikely.
         pass
-# --------------------------------------------------
 
 import threading
 import tkinter as tk
@@ -42,7 +38,6 @@ if getattr(sys, 'frozen', False):
     bundle_dir = sys._MEIPASS
     ffmpeg_path = os.path.join(bundle_dir, 'bin')
     os.environ["PATH"] += os.pathsep + ffmpeg_path
-# -------------------------------------------------------------
 
 from utils import constants
 from utils.logging_setup import setup_logging
