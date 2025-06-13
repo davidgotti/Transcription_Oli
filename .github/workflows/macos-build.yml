@@ -15,11 +15,9 @@ jobs:
 
     steps:
       # Step 1: Check out your repository code
-      # This will also pull down the ffmpeg binary from Git LFS automatically.
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          # This is required to check out LFS files.
           lfs: true
 
       # Step 2: Set up Python
@@ -28,6 +26,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          
+      # --- FIX: INSTALL PORTAUDIO ---
+      # This step installs the required PortAudio system library
+      # so that PyAudio can be successfully compiled.
+      - name: Install PortAudio
+        run: brew install portaudio
 
       # Step 3: Install project dependencies
       - name: Install dependencies
