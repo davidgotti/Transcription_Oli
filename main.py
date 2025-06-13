@@ -2,18 +2,31 @@
 import os
 import sys
 
-# --- FINAL FIX for PyInstaller Distribution ---
-# This "monkey patch" solves the 'tqdm' crash when running as a bundled .exe.
-# The `openai-whisper` library uses `tqdm` to show download progress bars.
-# In a GUI app without a console (`console=False` in the .spec), `tqdm` can't
-# find a place to write and crashes with an AttributeError.
-# This code detects if the app is running from a PyInstaller bundle
-# (`sys.frozen` is True) and, if so, it disables tqdm's output.
+# This block should be at the very top of your main.py file.
 if getattr(sys, 'frozen', False):
-    from tqdm import tqdm
-    from functools import partial
-    # Replace the main tqdm class with a version where the output file is null
-    tqdm = partial(tqdm, file=open(os.devnull, 'w'))
+    # In a bundled app without a console, sys.stdout and sys.stderr can be None.
+    # We redirect them to a null output stream to prevent crashes from any library
+    # that tries to write to them.
+    _devnull = open(os.devnull, 'w')
+    if sys.stdout is None:
+        sys.stdout = _devnull
+    if sys.stderr is None:
+        sys.stderr = _devnull
+
+    # The 'tqdm' library, used by 'whisper' for download progress bars, is a known 
+    # cause of this crash. We patch it to ensure it writes to our safe output stream.
+    try:
+        from tqdm import tqdm
+        from functools import partial
+        # We replace the original tqdm class with a partial function that has 
+        # the 'file' argument preset to our safe (and null) stdout.
+        tqdm = partial(tqdm, file=sys.stdout)
+    except ImportError:
+        # tqdm might not be installed in all development environments.
+        pass
+    except Exception as e:
+        # If the patch fails, this will attempt to write to the (now safe) stderr.
+        print(f"Error applying tqdm patch: {e}", file=sys.stderr)
 
 # --- FIX FOR VIRTUAL MACHINE FILE SYSTEM ISSUES ---
 # Set a dedicated cache directory for the Whisper model.
