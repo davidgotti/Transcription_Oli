@@ -6,7 +6,11 @@ from utils import constants # Assuming constants.py is in the same directory
 # ---- CORRECTED LOG DIRECTORY ----
 APP_NAME = "TranscriptionOli" # Or your app's name
 USER_DATA_DIR = os.path.expanduser(f"~/Library/Application Support/{APP_NAME}")
+<<<<<<< HEAD
 LOG_DIRECTORY = os.path.join(USER_DATA_DIR, "logs")
+=======
+LOG_DIRECTORY = os.path.join(constants.APP_USER_DATA_DIR, "logs")
+>>>>>>> ad2357cfa3db78e5a6649cfa66120c79cbc04232
 # ---- END CORRECTION ----
 
 if not os.path.exists(LOG_DIRECTORY):

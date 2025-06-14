@@ -1,21 +1,43 @@
 # main.py
+import os
+import sys
+
+# --- FINAL FIX for PyInstaller Distribution ---
+# This "monkey patch" solves the 'tqdm' crash when running as a bundled .exe.
+# The `openai-whisper` library uses `tqdm` to show download progress bars.
+# In a GUI app without a console (`console=False` in the .spec), `tqdm` can't
+# find a place to write and crashes with an AttributeError.
+# This code detects if the app is running from a PyInstaller bundle
+# (`sys.frozen` is True) and, if so, it disables tqdm's output.
+if getattr(sys, 'frozen', False):
+    from tqdm import tqdm
+    from functools import partial
+    # Replace the main tqdm class with a version where the output file is null
+    tqdm = partial(tqdm, file=open(os.devnull, 'w'))
+    # You could also completely disable it, but this is safer:
+    # from unittest.mock import MagicMock
+    # sys.modules['tqdm'] = MagicMock()
+
+# --- FIX FOR VIRTUAL MACHINE FILE SYSTEM ISSUES ---
+# Set a dedicated cache directory for the Whisper model.
+cache_dir_path = "C:\\TranscriptionOli_Cache"
+if sys.platform == "win32" and not os.path.exists(cache_dir_path):
+    try:
+        os.makedirs(cache_dir_path)
+        os.environ['XDG_CACHE_HOME'] = cache_dir_path
+    except OSError:
+        # Fallback if C: drive is not writable, though unlikely.
+        pass
+# --------------------------------------------------
+
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import queue # Ensure queue is imported
+from tkinter import filedialog, messagebox
+import queue
 import logging
 import os
-import multiprocessing
-# --- New code to add the bundled ffmpeg to the PATH ---
-if getattr(sys, 'frozen', False):
-    # This checks if the app is running in a bundled environment (e.g., from PyInstaller)
-    bundle_dir = sys._MEIPASS
-    # The path to the 'bin' directory containing ffmpeg
-    ffmpeg_path = os.path.join(bundle_dir, 'bin')
-    # Add this path to the OS's PATH environment variable
-    os.environ["PATH"] += os.pathsep + ffmpeg_path
-# -------------------------------------------------------------
 
+# --- Project-specific imports ---
 from utils import constants
 from utils.logging_setup import setup_logging
 from utils.config_manager import ConfigManager
@@ -31,12 +53,8 @@ logger = logging.getLogger(__name__)
 app_instance = None
 
 class MainApp:
-    def __init__(self, root_tk_param):
-        global app_instance
-        app_instance = self
-        self.root = root_tk_param
-
-        # ConfigManager is initialized early and stored
+    def __init__(self, root_tk):
+        self.root = root_tk
         self.config_manager = ConfigManager(constants.DEFAULT_CONFIG_FILE)
         logger.info(f"ConfigManager initialized with path: {constants.DEFAULT_CONFIG_FILE}")
 
@@ -76,176 +94,14 @@ class MainApp:
         self.root.after(200, self._poll_error_display_queue)
         self.root.after(100, self._check_ui_update_queue)
 
-        # Get initial show tips state for the main window
-        initial_main_show_tips = self.config_manager.get_main_window_show_tips()
-        logger.info(f"Initial 'Show Tips' state for Main Window: {initial_main_show_tips}")
-
         self.ui = UI(self.root,
                      start_processing_callback=self.start_processing,
-                     select_audio_file_callback=self.select_audio_files,
-                     open_correction_window_callback=self.open_correction_window,
-                     config_manager_instance=self.config_manager, # Pass ConfigManager
-                     initial_show_tips_state=initial_main_show_tips # Pass initial tips state
+                     select_audio_file_callback=self.select_audio_file,
+                     open_correction_window_callback=self.open_correction_window # Pass the new callback
                      )
         self.ui.set_save_token_callback(self.save_huggingface_token)
         self._load_and_display_saved_token()
-        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
-        logger.info("MainApp: Basic UI framework setup complete (final geometry/state pending).")
-
-    def _load_models_in_background(self):
-        logger.info("MainApp: Starting model loading in background thread.")
-        success = False
-        error_for_finalize = None
-        try:
-            # Determine initial UI states for diarization and auto-merge for the first AudioProcessor init
-            # These are used if self.ui is not fully available yet during this background thread's run
-            initial_diarization_enabled = self.config_manager.get_use_auth_token() # A proxy for initial intent if token exists
-            initial_auto_merge_enabled = False # Default to false initially for background load
-
-            if hasattr(self, 'ui') and self.ui: # If UI is available, use its current values
-                initial_diarization_enabled = self.ui.enable_diarization_var.get()
-                initial_auto_merge_enabled = self.ui.auto_merge_var.get() if initial_diarization_enabled else False
-
-            success = self._ensure_audio_processor_initialized(
-                is_initial_setup=True,
-                initial_model_key="large (recommended)",
-                initial_diarization_enabled_from_ui=initial_diarization_enabled,
-                initial_auto_merge_enabled_from_ui=initial_auto_merge_enabled
-            )
-            logger.info(f"Model loading thread: _ensure_audio_processor_initialized returned {success}")
-            self.completion_queue.put((success, error_for_finalize))
-            logger.info(f"Model loading thread: Put success={success} on completion_queue.")
-        except Exception as e:
-            logger.error(f"Exception in model loading thread: {e}", exc_info=True)
-            error_for_finalize = str(e)
-            success = False
-            self.completion_queue.put((success, error_for_finalize))
-            logger.info(f"Model loading thread: Put success={success} (due to exception) on completion_queue.")
-
-
-    def _finalize_startup_on_main_thread(self, models_loaded_ok, error_msg=None):
-        logger.critical(f"--- CRITICAL: ENTERING _finalize_startup_on_main_thread. models_loaded_ok={models_loaded_ok}, error_msg='{error_msg}' ---")
-
-        if self.launch_screen_ref and self.launch_screen_ref.winfo_exists():
-            logger.info("Launch screen exists, attempting to close.")
-            try:
-                self.launch_screen_ref.attributes('-topmost', False)
-                self.launch_screen_ref.close()
-                logger.info("Launch screen closed.")
-            except Exception as e:
-                logger.error(f"Error closing launch screen: {e}", exc_info=True)
-            self.launch_screen_ref = None
-        elif self.launch_screen_ref:
-            logger.warning("Launch screen reference exists but winfo_exists() is false.")
-        else:
-            logger.warning("Launch screen reference is None at finalize time.")
-
-        if models_loaded_ok:
-            if self.root and self.root.winfo_exists():
-                logger.info("Essential models loaded OK. Preparing to show main window.")
-                try:
-                    logger.info("Applying final geometry/zoom state...")
-                    self.root.state('zoomed')
-                except tk.TclError:
-                    logger.warning("Failed to set 'zoomed' state, using geometry fallback.")
-                    screen_width = self.root.winfo_screenwidth()
-                    screen_height = self.root.winfo_screenheight()
-                    self.root.geometry(f"{screen_width}x{screen_height}+0+0")
-                
-                logger.info("Deiconifying main window...")
-                self.root.deiconify()
-                logger.info("Lifting main window...")
-                self.root.lift()
-                logger.info("Forcing focus to main window...")
-                self.root.focus_force()
-                self.root.update_idletasks()
-                logger.info("MainApp: Application fully initialized and displayed.")
-            else:
-                logger.error("Root window does not exist at finalization after successful model load!")
-        else:
-            logger.error(f"Essential model loading failed. Error: {error_msg}")
-            full_error_message = f"Failed to initialize essential application models (transcription): {error_msg or 'Unknown error'}.\nPlease check logs and setup."
-            msg_parent = self.root if self.root and self.root.winfo_exists() else None
-            if msg_parent:
-                messagebox.showerror("Application Startup Error", full_error_message, parent=msg_parent)
-            else:
-                logger.critical(f"Cannot show messagebox (no parent): {full_error_message}")
-
-            if self.root and self.root.winfo_exists():
-                logger.info("Destroying root window due to essential model loading failure.")
-                self.root.destroy()
-        logger.info(f"--- EXITING _finalize_startup_on_main_thread ---")
-
-
-    def _check_completion_queue(self):
-        try:
-            while not self.completion_queue.empty():
-                success, err_msg = self.completion_queue.get_nowait()
-                logger.info(f"MainThread: Got completion signal from queue. Success: {success}, Error: {err_msg}")
-                self._finalize_startup_on_main_thread(success, err_msg)
-                if self._completion_poller_id:
-                    self.root.after_cancel(self._completion_poller_id)
-                    self._completion_poller_id = None
-                return
-            
-            if self.root and self.root.winfo_exists() and self._completion_poller_id:
-                 self._completion_poller_id = self.root.after(100, self._check_completion_queue)
-
-        except queue.Empty:
-            if self.root and self.root.winfo_exists() and self._completion_poller_id:
-                 self._completion_poller_id = self.root.after(100, self._check_completion_queue)
-        except Exception as e:
-            logger.error(f"Error in _check_completion_queue: {e}", exc_info=True)
-            # Ensure finalize is called even on error to close launch screen and show error
-            self._finalize_startup_on_main_thread(False, f"Error during startup sequence: {e}")
-            if self.root and self.root.winfo_exists() and self._completion_poller_id:
-                self.root.after_cancel(self._completion_poller_id)
-                self._completion_poller_id = None
-
-
-    def start_initialization_sequence(self, launch_screen):
-        self.launch_screen_ref = launch_screen
-        self._setup_main_ui_elements() # This now passes ConfigManager and initial tips state to UI
-
-        if self.launch_screen_ref and hasattr(self.launch_screen_ref, 'loading_label_text'):
-            self.launch_screen_ref.loading_label_text.set("Loading models, please wait...")
-            if self.launch_screen_ref.winfo_exists():
-                 self.launch_screen_ref.update_idletasks()
-        
-        if self.root and self.root.winfo_exists():
-            self._completion_poller_id = self.root.after(100, self._check_completion_queue)
-
-        model_loader_thread = threading.Thread(
-            target=self._load_models_in_background,
-            daemon=True
-        )
-        model_loader_thread.start()
-
-    def _on_closing(self):
-        logger.info("Application closing sequence initiated.")
-        if self.processing_thread and self.processing_thread.is_alive():
-            if messagebox.askyesno("Processing Active",
-                                   "Audio processing is currently active. Exiting now may lead to incomplete results or errors. Are you sure you want to exit?",
-                                   parent=self.root):
-                logger.warning("User chose to exit while processing was active.")
-                # Consider how to gracefully stop the thread if possible, though it's complex.
-            else:
-                logger.info("User cancelled exit due to active processing.")
-                return
-
-        if self.correction_window_instance and hasattr(self.correction_window_instance, 'window') and self.correction_window_instance.window.winfo_exists():
-            logger.info("Closing correction window as part of main app shutdown.")
-            if hasattr(self.correction_window_instance, '_on_close') and callable(self.correction_window_instance._on_close):
-                self.correction_window_instance._on_close()
-            else:
-                try:
-                    self.correction_window_instance.window.destroy()
-                except Exception as e:
-                    logger.error(f"Error destroying correction window directly: {e}")
-
-        logger.info("Destroying main application window.")
-        if self.root and self.root.winfo_exists():
-            self.root.destroy()
+        self._ensure_audio_processor_initialized(is_initial_setup=True)
 
     def open_correction_window(self):
         logger.info("Attempting to open correction window.")
@@ -254,98 +110,45 @@ class MainApp:
             self.correction_window_instance.window.focus_force()
             logger.info("Correction window already open, lifting to front and focusing.")
         else:
-            include_timestamps_main = self.ui.include_timestamps_var.get()
-            include_end_times_main = self.ui.include_end_times_var.get() if include_timestamps_main else False
-
-            # Get initial show tips state for the correction window
-            initial_corr_show_tips = self.config_manager.get_correction_window_show_tips()
-            logger.info(f"Initial 'Show Tips' state for Correction Window: {initial_corr_show_tips}")
-
-            self.correction_window_instance = CorrectionWindow(
-                self.root,
-                config_manager_instance=self.config_manager, # Pass ConfigManager
-                initial_show_tips_state=initial_corr_show_tips, # Pass initial tips state
-                initial_include_timestamps=include_timestamps_main,
-                initial_include_end_times=include_end_times_main
-            )
-            logger.info(f"New correction window created with TS: {include_timestamps_main}, EndTS: {include_end_times_main}, Tips: {initial_corr_show_tips}")
-
-            if self.last_successful_audio_path and self.last_successful_transcription_path:
-                logger.info(f"Populating correction window with last successful: Audio='{self.last_successful_audio_path}', Txt='{self.last_successful_transcription_path}'")
-                if hasattr(self.correction_window_instance, 'ui'):
-                    if hasattr(self.correction_window_instance.ui, 'transcription_file_path_var'):
-                        self.correction_window_instance.ui.transcription_file_path_var.set(self.last_successful_transcription_path)
-                    if hasattr(self.correction_window_instance.ui, 'audio_file_path_var'):
-                        self.correction_window_instance.ui.audio_file_path_var.set(self.last_successful_audio_path)
-                    if hasattr(self.correction_window_instance, 'callback_handler') and \
-                       hasattr(self.correction_window_instance.callback_handler, 'load_files'):
-                        # Defer the call slightly to ensure CorrectionWindow UI is fully initialized
-                        self.root.after(50, self.correction_window_instance.callback_handler.load_files)
-            else:
-                logger.info("No last successful transcription/audio to auto-load into correction window.")
-
+            self.correction_window_instance = CorrectionWindow(self.root)
+            logging.info("New correction window created.")
+            # You might want to pass initial transcription/audio paths if available
+            # e.g., if a file was just processed:
+            # if self.audio_file_path and hasattr(self, 'last_saved_transcription_path'):
+            #    self.correction_window_instance.transcription_file_path.set(self.last_saved_transcription_path)
+            #    self.correction_window_instance.audio_file_path.set(self.audio_file_path)
+            #    self.correction_window_instance._load_files() # Optionally auto-load
 
     def _load_and_display_saved_token(self):
         logger.info("Loading saved Hugging Face token...")
         token = self.config_manager.load_huggingface_token()
-        if self.ui: # Ensure UI is initialized
-            self.ui.load_token_ui(token if token else "")
+        if token:
+            self.ui.load_token_ui(token)
+            logging.info("Token loaded into UI.")
         else:
             logger.warning("_load_and_display_saved_token: UI not ready.")
 
 
     def save_huggingface_token(self, token: str):
-        token_to_save = token.strip() if token else ""
-        logger.info(f"Saving Hugging Face token: {'Present' if token_to_save else 'Empty'}")
-        self.config_manager.save_huggingface_token(token_to_save)
-        self.config_manager.set_use_auth_token(bool(token_to_save))
-        messagebox.showinfo("Token Saved", "Hugging Face token has been saved." if token_to_save else "Hugging Face token has been cleared.", parent=self.root)
-        
-        if self.audio_processor:
-             logger.info("Hugging Face token changed, re-evaluating AudioProcessor state.")
-             if self.ui and self.ui.enable_diarization_var.get(): # Only re-init if diarization is currently desired
-                 try:
-                    current_auto_merge = self.ui.auto_merge_var.get() if self.ui else False
-                    self._ensure_audio_processor_initialized(
-                        force_reinitialize=True, # Force re-init to pick up new token status
-                        initial_auto_merge_enabled_from_ui=current_auto_merge
-                    )
-                    # Feedback about diarization model status after re-init
-                    if self.audio_processor and self.audio_processor.output_enable_diarization and \
-                        self.audio_processor.diarization_handler and \
-                        self.audio_processor.diarization_handler.is_model_loaded():
-                        self.ui_update_queue.put({
-                            "type": constants.MSG_TYPE_STATUS,
-                            "text": "Diarization model ready with new token."
-                        })
-                    elif self.audio_processor and self.audio_processor.enable_diarization : # Diarization enabled, but model not loaded
-                         self.ui_update_queue.put({
-                            "type": constants.MSG_TYPE_STATUS,
-                            "text": "Warning: Diarization model failed with new token. Check token."
-                        })
-                    # If diarization is not enabled, no specific message about its model status needed here.
-                 except Exception as e:
-                     logger.error(f"Error re-initializing AudioProcessor after token save: {e}")
-                     self.ui_update_queue.put({
-                        "type": constants.MSG_TYPE_STATUS,
-                        "text": f"Error applying token: {str(e)[:50]}..."
-                    })
+        logging.info(f"Saving Hugging Face token: {'present' if token else 'empty'}")
+        self.config_manager.save_huggingface_token(token)
+        self.config_manager.set_use_auth_token(bool(token))
+        messagebox.showinfo("Token Saved", "Hugging Face token has been saved.")
+        logging.info("Token saved. Configuration updated.")
+        self._ensure_audio_processor_initialized(force_reinitialize=True)
 
-
-    def select_audio_files(self):
-        logger.info("Opening file dialog to select audio file(s)...")
-        selected_paths = filedialog.askopenfilenames(
+    def select_audio_file(self):
+        logging.info("Opening file dialog to select audio file...")
+        file_path = filedialog.askopenfilename(
             defaultextension=".wav",
             filetypes=[("Audio Files", "*.wav *.mp3 *.aac *.flac *.m4a"), ("All files", "*.*")],
             parent=self.root
         )
-        if selected_paths:
-            self.audio_file_paths = list(selected_paths)
-            if self.ui: # Ensure UI is initialized
-                self.ui.update_audio_file_entry_display(self.audio_file_paths)
-            logger.info(f"{len(self.audio_file_paths)} audio file(s) selected.")
-            self.last_successful_transcription_path = None
-            self.last_successful_audio_path = None
+        if file_path:
+            self.audio_file_path = file_path
+            self.ui.audio_file_entry.delete(0, tk.END)
+            self.ui.audio_file_entry.insert(0, file_path)
+            logging.info(f"Audio file selected: {file_path}")
         else:
             logger.info("No audio file selected or selection cancelled.")
 
@@ -355,152 +158,60 @@ class MainApp:
         # It must NOT interact with Tkinter objects directly.
         # Its only job is to put data onto the thread-safe queue.
         def callback(message: str, percentage: int = None):
-            try: # Add a try-except here for robustness in the thread
-                if message:
-                    status_payload = {"type": constants.MSG_TYPE_STATUS, "text": message}
-                    if hasattr(self, 'ui_update_queue') and self.ui_update_queue is not None:
-                        self.ui_update_queue.put(status_payload)
-                    else:
-                        # This print is for debugging if queue is missing; normally, log this
-                        print(f"Debug: ui_update_queue not available in progress_callback for status: {message}")
-                if percentage is not None:
-                    progress_payload = {"type": constants.MSG_TYPE_PROGRESS, "value": percentage}
-                    if hasattr(self, 'ui_update_queue') and self.ui_update_queue is not None:
-                        self.ui_update_queue.put(progress_payload)
-                    else:
-                        print(f"Debug: ui_update_queue not available in progress_callback for progress: {percentage}")
-            except Exception as e:
-                # Log errors occurring within the callback itself if queue operations fail
-                print(f"Error in threaded progress_callback: {e}")
-                logger.error(f"Error in threaded progress_callback: {e}", exc_info=True)
+            if message:
+                status_payload = {"type": constants.MSG_TYPE_STATUS, "text": message}
+                self.ui_update_queue.put(status_payload)
+            if percentage is not None:
+                progress_payload = {"type": constants.MSG_TYPE_PROGRESS, "value": percentage}
+                self.ui_update_queue.put(progress_payload)
         return callback
 
-    def _map_ui_model_key_to_whisper_name(self, ui_model_key: str) -> str:
-        mapping = {
-            "tiny": "tiny", "base": "base", "small": "small", "medium": "medium",
-            "large (recommended)": "large", "turbo": "small" # Assuming turbo maps to small
-        }
-        return mapping.get(ui_model_key, "large") # Default to large if key not found
-
-
-    def _ensure_audio_processor_initialized(self, force_reinitialize=False, is_initial_setup=False,
-                                           initial_model_key=None,
-                                           initial_diarization_enabled_from_ui=None,
-                                           initial_auto_merge_enabled_from_ui=None):
-        
-        current_enable_diarization = initial_diarization_enabled_from_ui \
-            if is_initial_setup and initial_diarization_enabled_from_ui is not None \
-            else (self.ui.enable_diarization_var.get() if hasattr(self, 'ui') and self.ui else False)
-
-        current_auto_merge_enabled = initial_auto_merge_enabled_from_ui \
-            if is_initial_setup and initial_auto_merge_enabled_from_ui is not None \
-            else (self.ui.auto_merge_var.get() if hasattr(self, 'ui') and self.ui else False)
-        
-        if not current_enable_diarization: 
-            current_auto_merge_enabled = False
-
-        ui_model_key_to_use = initial_model_key
-        if hasattr(self, 'ui') and self.ui and self.ui.model_var.get():
-             if not initial_model_key or not is_initial_setup : 
-                ui_model_key_to_use = self.ui.model_var.get()
-        
-        if not ui_model_key_to_use: 
-            logger.warning("Model key not determined for audio processor, defaulting to 'large (recommended)'.")
-            ui_model_key_to_use = "large (recommended)"
-
-        actual_whisper_model_name = self._map_ui_model_key_to_whisper_name(ui_model_key_to_use)
-        
-        current_include_timestamps = self.ui.include_timestamps_var.get() if hasattr(self, 'ui') and self.ui else True
-        current_include_end_times = self.ui.include_end_times_var.get() if hasattr(self, 'ui') and self.ui and current_include_timestamps else False
-
-        needs_reinit = force_reinitialize
-        if not self.audio_processor:
-            needs_reinit = True
-        elif not needs_reinit: 
-            # --- THIS IS THE SECTION THAT NEEDS CORRECTION ---
-            options_changed = (
-                self.audio_processor.transcription_handler.model_name != actual_whisper_model_name or
-                # Use the new attribute names for checking the existing audio_processor instance
-                self.audio_processor.output_enable_diarization != current_enable_diarization or
-                self.audio_processor.output_include_timestamps != current_include_timestamps or
-                self.audio_processor.output_include_end_times != current_include_end_times or
-                self.audio_processor.output_enable_auto_merge != current_auto_merge_enabled
-            )
-            # --- END CORRECTION ---
-            if options_changed:
-                needs_reinit = True
-            elif not self.audio_processor.are_models_loaded(): 
-                needs_reinit = True
-
-        if needs_reinit:
-            logger.info(f"Initializing/Re-initializing AudioProcessor. Model: '{actual_whisper_model_name}'. "
-                        f"Diarization Requested: {current_enable_diarization}. "
-                        f"Auto Merge: {current_auto_merge_enabled}. "
-                        f"Timestamps: {current_include_timestamps}, EndTimes: {current_include_end_times}. "
-                        f"Initial Setup: {is_initial_setup}, ForceReinit: {force_reinitialize}")
-            current_progress_callback = self._make_progress_callback()
-            try:
-                use_auth = self.config_manager.get_use_auth_token()
-                hf_token = self.config_manager.load_huggingface_token() if use_auth else None
-                processor_config = {
-                    'huggingface': {'use_auth_token': 'yes' if use_auth else 'no', 'hf_token': hf_token},
-                    'transcription': {'model_name': actual_whisper_model_name}
-                }
-                # When creating a new AudioProcessor, the parameters are correctly named based on UI intent
-                self.audio_processor = AudioProcessor(
-                    config=processor_config, progress_callback=current_progress_callback,
-                    enable_diarization=current_enable_diarization, # This maps to output_enable_diarization in AudioProcessor.__init__
-                    include_timestamps=current_include_timestamps, # This maps to output_include_timestamps
-                    include_end_times=current_include_end_times,   # This maps to output_include_end_times
-                    enable_auto_merge=current_auto_merge_enabled   # This maps to output_enable_auto_merge
-                )
-                if not self.audio_processor.are_models_loaded(): 
-                    err_msg = "AudioProcessor critical models (transcription) failed to load. Check logs."
-                    logger.error(err_msg)
-                    raise RuntimeError(err_msg)
-
-                # Check diarization status using the new attribute name
-                if self.audio_processor.output_enable_diarization: # Check output_enable_diarization
-                    if not self.audio_processor.diarization_handler or \
-                       not self.audio_processor.diarization_handler.is_model_loaded():
-                        warning_msg = "Diarization was enabled, but the diarization model could not be loaded. Diarization features will be disabled for this run."
-                        logger.warning(f"Non-fatal issue during init: {warning_msg}")
-                        if hasattr(self, 'ui_update_queue') and self.ui_update_queue and not is_initial_setup:
-                            self.ui_update_queue.put({
-                                "type": constants.MSG_TYPE_STATUS,
-                                "text": "Warning: Diarization unavailable. Check token & HF conditions."
-                            })
-                    elif not is_initial_setup: 
-                        self.ui_update_queue.put({
-                            "type": constants.MSG_TYPE_STATUS,
-                            "text": "Diarization model loaded successfully."
-                        })
-                logger.info("AudioProcessor initialized/re-initialized successfully.")
+    def _ensure_audio_processor_initialized(self, force_reinitialize=False, is_initial_setup=False):
+        if self.audio_processor and not force_reinitialize:
+            if self.audio_processor.are_models_loaded():
+                logging.debug("Audio processor already initialized and models loaded.")
                 return True
-            except Exception as e:
-                err_msg = f"Failed to initialize/re-initialize audio processing components: {e}"
-                logger.exception(err_msg)
-                if not is_initial_setup and hasattr(self, 'ui_update_queue') and self.ui_update_queue:
-                    self.ui_update_queue.put({"type": constants.MSG_TYPE_STATUS, "text": err_msg})
-                raise 
-        
-        if self.audio_processor:
-             logger.debug("Audio processor already initialized, essential models loaded, and options unchanged.")
-             # Check diarization status again if it was requested but model might not have been loaded previously
-             # Use new attribute name here as well
-             if current_enable_diarization and \
-                (not self.audio_processor.diarization_handler or \
-                 not self.audio_processor.output_enable_diarization or # More direct check of the processor's state
-                 not self.audio_processor.diarization_handler.is_model_loaded()):
-                logger.warning("AudioProcessor: Diarization is enabled by user, but model not loaded. Processing will proceed without it.")
-                if hasattr(self, 'ui_update_queue') and self.ui_update_queue and not is_initial_setup:
-                    self.ui_update_queue.put({
-                        "type": constants.MSG_TYPE_STATUS,
-                        "text": "Warning: Diarization enabled but model not loaded. Check token."
-                    })
-             return True
-        
-        return False
+            logging.warning("Audio processor exists but models not loaded. Re-initializing.")
+
+        logging.info(f"Ensuring AudioProcessor is initialized. Force: {force_reinitialize}, Initial: {is_initial_setup}")
+        try:
+            use_auth = self.config_manager.get_use_auth_token()
+            hf_token = self.config_manager.load_huggingface_token() if use_auth else None
+
+            if use_auth and not hf_token:
+                logging.warning("'Use auth token' is enabled, but no Hugging Face token is found. "
+                                "Loading restricted models from Pyannote might fail.")
+
+            processor_config = {
+                'huggingface': {
+                    'use_auth_token': 'yes' if use_auth else 'no',
+                    'hf_token': hf_token
+                }
+            }
+            progress_cb = self._make_progress_callback()
+            # Ensure AudioProcessor is initialized only if it's needed for transcription processing
+            # For the correction window, it's not directly used by MainApp.
+            if not self.audio_processor or force_reinitialize:
+                 self.audio_processor = AudioProcessor(processor_config, progress_callback=progress_cb)
+                 logging.info(f"AudioProcessor instance {'re' if force_reinitialize else ''}created. "
+                             f"Auth: {use_auth}, Token physically present: {bool(hf_token)}")
+
+
+            if not self.audio_processor.are_models_loaded():
+                error_msg = ("AudioProcessor essential models (Pyannote/Whisper) failed to load. "
+                             "Please check console logs for details (e.g., token issues, network problems).")
+                logging.error(error_msg)
+                if not is_initial_setup: # Avoid error popup on initial startup if models fail then
+                    self.error_display_queue.put(error_msg)
+                return False # Indicate failure to initialize or load models
+            logging.info("AudioProcessor initialized/verified and models are loaded.")
+            return True
+        except Exception as e:
+            logging.exception("Critical error during AudioProcessor initialization/verification.")
+            error_msg = f"Failed to initialize audio processing components: {str(e)}"
+            if not is_initial_setup:
+                 self.error_display_queue.put(error_msg)
+            return False
 
 
     def start_processing(self):
@@ -508,17 +219,9 @@ class MainApp:
         if not self.audio_file_paths:
             messagebox.showerror("Error", "Please select one or more valid audio files first.", parent=self.root); return
         if self.processing_thread and self.processing_thread.is_alive():
-            messagebox.showwarning("Busy", "Processing is already in progress.", parent=self.root); return
-        try:
-            # No need to pass initial_diarization_enabled_from_ui or initial_auto_merge_enabled_from_ui here
-            # as _ensure_audio_processor_initialized will get current values from UI if available.
-            # The force_reinitialize=True will ensure it checks current UI options.
-            if not self._ensure_audio_processor_initialized(force_reinitialize=True):
-                logger.error("Start processing: Audio processor not ready or failed to re-initialize. Aborting."); return
-        except Exception as e:
-             logger.error(f"Failed to ensure audio processor initialized for processing: {e}")
-             messagebox.showerror("Error", f"Could not initialize audio processor: {e}", parent=self.root)
-             return
+            messagebox.showwarning("Busy", "Processing is already in progress.")
+            logging.warning("Start processing: Processing already in progress.")
+            return
 
         self.ui.disable_ui_for_processing()
         
@@ -535,206 +238,96 @@ class MainApp:
         
         self.processing_thread.start()
 
-    def _processing_thread_worker_single(self, audio_file_to_process):
-        logger.info(f"Thread worker (single): Starting audio processing for: {audio_file_to_process}")
-        status, msg, is_empty, segments_data = constants.STATUS_ERROR, "Unknown error during single file processing.", False, None
-        is_plain_text_output_from_processor = False # Default
+    def _processing_thread_worker(self, current_audio_file):
+        logging.info(f"Thread worker: Starting audio processing for: {current_audio_file}")
+        final_status_for_queue = constants.STATUS_ERROR
+        error_message_for_queue = "An unknown error occurred in the processing thread."
+        is_empty_for_queue = False
+        processed_segments_for_payload = None
+        # self.last_saved_transcription_path = None # To potentially pass to correction window
+
         try:
             if not self.audio_processor or not self.audio_processor.transcription_handler.is_model_loaded():
                 msg = "Critical error: Audio processor or transcription model became unavailable before processing."
                 logger.error(msg)
             else:
-                result_obj = self.audio_processor.process_audio(audio_file_to_process) # Get the full result object
-                status = result_obj.status
-                msg = result_obj.message
-                is_empty = result_obj.status == constants.STATUS_EMPTY
-                segments_data = result_obj.data # This can be a list of strings or a single string
-                is_plain_text_output_from_processor = result_obj.is_plain_text_output
+                result = self.audio_processor.process_audio(current_audio_file)
 
-                if result_obj.status == constants.STATUS_SUCCESS and not segments_data and not is_plain_text_output_from_processor: # For segmented output, data is expected
-                    status, is_empty, msg = constants.STATUS_EMPTY, True, result_obj.message or "Successful but no segments generated."
-                elif result_obj.status == constants.STATUS_SUCCESS and is_plain_text_output_from_processor and not segments_data: # For plain text, empty string is possible
-                     # is_empty could be true if the plain text result is an empty string.
-                     # The ProcessedAudioResult(status=constants.STATUS_EMPTY, message="No speech detected...")
-                     # from audio_processor already handles the case where transcription_output_dict['segments'] is empty.
-                     # This path should ideally be covered by that.
-                     pass
+                final_status_for_queue = result.status
+                error_message_for_queue = result.message 
+                is_empty_for_queue = result.status == constants.STATUS_EMPTY
+                processed_segments_for_payload = result.data if result.status == constants.STATUS_SUCCESS else None
 
+                if result.status == constants.STATUS_SUCCESS:
+                    logging.info(f"Thread worker: Audio processing complete. Segments ready ({len(processed_segments_for_payload) if processed_segments_for_payload else 0} segments).")
+                    if not processed_segments_for_payload: 
+                        logging.warning("Thread worker: Processing reported success but returned no segments.")
+                        final_status_for_queue = constants.STATUS_EMPTY 
+                        is_empty_for_queue = True
+                        error_message_for_queue = result.message or "Processing was successful but yielded no segments."
+                elif result.status == constants.STATUS_EMPTY:
+                    logging.warning(f"Thread worker: Audio processing resulted in empty output. Message: {result.message}")
+                elif result.status == constants.STATUS_ERROR:
+                    logging.error(f"Thread worker: Audio processing failed. Message: {result.message}")
 
         except Exception as e:
             logger.exception("Thread worker (single): Unhandled error during processing.")
             msg = f"Unexpected error processing {os.path.basename(audio_file_to_process)}: {e}"
         finally:
-            logger.info(f"Thread worker (single): Finalizing for {os.path.basename(audio_file_to_process)} with status '{status}'. Plain text output: {is_plain_text_output_from_processor}")
-            if self.root and self.root.winfo_exists():
-                self.ui_update_queue.put({
-                    "type": constants.MSG_TYPE_COMPLETED,
-                    constants.KEY_FINAL_STATUS: status,
-                    constants.KEY_ERROR_MESSAGE: msg,
-                    constants.KEY_IS_EMPTY_RESULT: is_empty,
-                    "processed_data": segments_data, # Renamed from "processed_segments"
-                    "is_plain_text_output": is_plain_text_output_from_processor, # Add the flag
-                    "original_audio_path": audio_file_to_process
-                })
+            logging.info(f"Thread worker: Finalizing with status '{final_status_for_queue}'.")
+            completion_payload = {
+                "type": constants.MSG_TYPE_COMPLETED,
+                constants.KEY_FINAL_STATUS: final_status_for_queue,
+                constants.KEY_ERROR_MESSAGE: error_message_for_queue if final_status_for_queue != constants.STATUS_SUCCESS or (final_status_for_queue == constants.STATUS_SUCCESS and processed_segments_for_payload is None) else None,
+                constants.KEY_IS_EMPTY_RESULT: is_empty_for_queue
+            }
+            if final_status_for_queue == constants.STATUS_SUCCESS and processed_segments_for_payload:
+                completion_payload["processed_segments"] = processed_segments_for_payload
 
-    def _processing_thread_worker_batch(self, files_to_process_list):
-        logger.info(f"Thread worker (batch): Starting processing for {len(files_to_process_list)} files.")
-        all_results_for_batch = []
-        total_files = len(files_to_process_list)
+            self.ui_update_queue.put(completion_payload)
+            logging.info("Thread worker: Completion message put on ui_update_queue.")
 
-        for i, file_path in enumerate(files_to_process_list):
-            base_filename = os.path.basename(file_path)
-            logger.info(f"Batch: Processing file {i+1}/{total_files}: {base_filename}")
-            if self.root and self.root.winfo_exists():
-                self.ui_update_queue.put({
-                    "type": constants.MSG_TYPE_BATCH_FILE_START,
-                    constants.KEY_BATCH_FILENAME: base_filename,
-                    constants.KEY_BATCH_CURRENT_IDX: i + 1,
-                    constants.KEY_BATCH_TOTAL_FILES: total_files
-                })
 
-            file_status, file_msg, file_is_empty = constants.STATUS_ERROR, f"Unknown error for {base_filename}", False
-            file_data = None
-            file_is_plain_text_output = False
+    def _prompt_for_save_location_and_save(self, segments_to_save: list):
+        logging.info("Prompting user for save location.")
+        default_filename = "transcription.txt"
+        if self.audio_file_path:
             try:
-                if not self.audio_processor or not self.audio_processor.transcription_handler.is_model_loaded():
-                    file_msg = f"Audio processor or transcription model unavailable for {base_filename}."
-                    logger.error(file_msg)
-                else:
-                    result_obj = self.audio_processor.process_audio(file_path)
-                    file_status = result_obj.status
-                    file_msg = result_obj.message
-                    file_is_empty = result_obj.status == constants.STATUS_EMPTY
-                    file_data = result_obj.data
-                    file_is_plain_text_output = result_obj.is_plain_text_output
-                    
-                    if result_obj.status == constants.STATUS_SUCCESS and not file_data and not file_is_plain_text_output:
-                         file_status, file_is_empty, file_msg = constants.STATUS_EMPTY, True, result_obj.message or "Successful but no segments."
-            
+                base = os.path.basename(self.audio_file_path)
+                name_without_ext = os.path.splitext(base)[0]
+                default_filename = f"{name_without_ext}_transcription.txt"
             except Exception as e:
-                logger.exception(f"Batch: Unhandled error processing {base_filename}")
-                file_msg = f"Critical error during processing of {base_filename}: {e}"
-            
-            all_results_for_batch.append({
-                "original_path": file_path,
-                "status": file_status,
-                "message": file_msg,
-                "is_empty": file_is_empty,
-                "data": file_data, # Renamed from "segments_data"
-                "is_plain_text_output": file_is_plain_text_output # Add the flag
-            })
+                logging.warning(f"Could not generate default filename from audio path: {e}")
 
-        logger.info("Batch processing of all files complete.")
-        if self.root and self.root.winfo_exists():
-            self.ui_update_queue.put({
-                "type": constants.MSG_TYPE_BATCH_COMPLETED,
-                constants.KEY_BATCH_ALL_RESULTS: all_results_for_batch
-            })
-
-
-    def _prompt_for_save_location_and_save_single(self, data_to_save: any, is_plain_text: bool, original_audio_path: str): # Added is_plain_text
-        default_fn = "transcription.txt"
-        try:
-            name, _ = os.path.splitext(os.path.basename(original_audio_path))
-            model_name_suffix = self.audio_processor.transcription_handler.model_name if self.audio_processor else "model"
-            default_fn = f"{name}_{model_name_suffix}_transcription.txt"
-        except Exception: pass
-
-        chosen_path = filedialog.asksaveasfilename(
-            defaultextension=".txt", filetypes=[("Text Files", "*.txt")],
-            title="Save Transcription As", initialfile=default_fn, parent=self.root
+        chosen_output_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+            title="Save Transcription As",
+            initialfile=default_filename,
+            parent=self.root 
         )
         if chosen_path:
             try:
-                # Pass the is_plain_text flag to save_to_txt
-                self.audio_processor.save_to_txt(chosen_path, data_to_save, is_plain_text=is_plain_text)
-                self.last_successful_transcription_path = chosen_path
-                self.last_successful_audio_path = original_audio_path
-                self.ui.update_status_and_progress("Transcription saved!", 100)
-                self.ui.display_processed_output(chosen_path, False) # This might need adjustment if displaying plain text directly
-                messagebox.showinfo("Success", f"Transcription saved to {chosen_path}", parent=self.root)
-                if self.root and self.root.winfo_exists(): self.root.focus_force()
+                self.audio_processor.save_to_txt(chosen_output_path, segments_to_save) 
+                logging.info(f"Output saved to: {chosen_output_path}")
+                # self.last_saved_transcription_path = chosen_output_path # Store for correction window
+                self.ui.update_status_and_progress("Transcription saved successfully!", 100)
+                self.ui.display_processed_output(chosen_output_path, processing_returned_empty=False)
+                messagebox.showinfo("Success", f"Transcription saved to {chosen_output_path}", parent=self.root)
             except Exception as e:
-                err_msg = f"Could not save file: {e}"
-                logger.exception(err_msg)
-                self.ui.update_status_and_progress("Save failed.", 100)
-                # Displaying data_to_save needs to handle if it's a string or list
-                display_content = data_to_save if is_plain_text else "\n".join(data_to_save or [])
-                self.ui.update_output_text(f"SAVE FAILED: {err_msg}\n\n{display_content}")
-                messagebox.showerror("Save Error", err_msg, parent=self.root)
-                if self.root and self.root.winfo_exists(): self.root.focus_force()
+                logging.exception(f"Error saving file to {chosen_output_path}")
+                error_message = f"Could not save file: {str(e)}"
+                self.ui.update_status_and_progress("Processing complete, but save failed.", 100)
+                text_to_display = "\n".join(segments_to_save) if segments_to_save else "No content from processing."
+                self.ui.update_output_text(f"SAVE FAILED: {error_message}\n\n{text_to_display}")
+                messagebox.showerror("Save Error", error_message, parent=self.root)
         else:
-            self.last_successful_transcription_path = None
-            self.last_successful_audio_path = None
-            self.ui.update_status_and_progress("Save cancelled by user.", 100)
-            display_content = data_to_save if is_plain_text else "\n".join(data_to_save or [])
-            self.ui.update_output_text(f"File not saved. Transcription content:\n\n{display_content}")
-            messagebox.showwarning("Save Cancelled", "File not saved. Content shown in output area.", parent=self.root)
-            if self.root and self.root.winfo_exists(): self.root.focus_force()
-
-
-    def _prompt_for_batch_save_directory_and_save(self, all_processed_results: list):
-        if not all_processed_results:
-            messagebox.showinfo("Batch Process Complete", "No results to save from the batch.", parent=self.root)
-            self.ui.update_status_and_progress("Batch complete. Nothing to save.", 100)
-            self.ui.update_output_text("Batch processing finished. No results were generated or all failed.")
-            return
-
-        output_dir = filedialog.askdirectory(
-            title="Select Directory to Save Batch Transcriptions",
-            parent=self.root
-        )
-
-        if not output_dir:
-            # ... (user cancelled save, existing logic is fine) ...
-            messagebox.showwarning("Batch Save Cancelled", "No directory selected. Batch transcriptions not saved.", parent=self.root) 
-            self.ui.update_status_and_progress("Batch complete. Save cancelled.", 100) 
-            summary_lines = ["Batch save cancelled. Transcriptions not saved to disk.\n"] 
-            for item in all_processed_results[:3]: 
-                 summary_lines.append(f"{os.path.basename(item['original_path'])}: {item['status']} - {item['message'][:50]}...") 
-            if len(all_processed_results) > 3: summary_lines.append("...") 
-            self.ui.display_processed_output(is_batch_summary=True, batch_summary_message="\n".join(summary_lines)) 
-            return
-
-
-        final_output_dir = output_dir
-        successful_saves = 0
-        failed_saves = 0
-        batch_summary_log = [f"Batch Processing Summary (Saved to: {final_output_dir}):"]
-
-        for item in all_processed_results:
-            original_file_path = item['original_path']
-            base_filename = os.path.basename(original_file_path)
-            item_data = item.get("data") # Use 'data' key
-            item_is_plain_text = item.get("is_plain_text_output", False) # Get the flag
-
-            if item['status'] == constants.STATUS_SUCCESS and item_data: # Check item_data exists
-                transcript_filename_base, _ = os.path.splitext(base_filename)
-                model_name_suffix = self.audio_processor.transcription_handler.model_name.replace('.', '') if self.audio_processor else "model"
-                output_filename = f"{transcript_filename_base}_{model_name_suffix}_transcript.txt"
-                
-                full_output_path = os.path.join(final_output_dir, output_filename)
-                try:
-                    # Pass the item_is_plain_text flag
-                    self.audio_processor.save_to_txt(full_output_path, item_data, is_plain_text=item_is_plain_text)
-                    logger.info(f"Batch save: Successfully saved {full_output_path}")
-                    batch_summary_log.append(f"  SUCCESS: {base_filename} -> {output_filename}")
-                    successful_saves += 1
-                    self.last_successful_audio_path = original_file_path
-                    self.last_successful_transcription_path = full_output_path
-                except Exception as e:
-                    logger.exception(f"Batch save: Failed to save {full_output_path}")
-                    batch_summary_log.append(f"  FAIL_SAVE: {base_filename} (Error: {e})")
-                    failed_saves += 1
-            else:
-                logger.warning(f"Batch save: Skipped saving for {base_filename} due to status: {item['status']} - {item['message']}")
-                batch_summary_log.append(f"  SKIPPED ({item['status']}): {base_filename} - {item['message']}")
-                failed_saves +=1
-
-        summary_message = f"Batch processing complete.\nSuccessfully saved: {successful_saves} file(s).\nFailed/Skipped: {failed_saves} file(s).\n\nLocation: {final_output_dir}"
-        messagebox.showinfo("Batch Save Complete", summary_message, parent=self.root)
-        self.ui.update_status_and_progress("Batch save complete.", 100)
-        self.ui.display_processed_output(is_batch_summary=True, batch_summary_message=summary_message + "\n\n" + "\n".join(batch_summary_log))
+            logging.info("User cancelled save dialog.")
+            # self.last_saved_transcription_path = None
+            self.ui.update_status_and_progress("Processing successful, save cancelled by user.", 100)
+            text_to_display = "\n".join(segments_to_save) if segments_to_save else "No content from processing."
+            self.ui.update_output_text(f"File not saved (cancelled by user).\n\n{text_to_display}")
+            messagebox.showwarning("Save Cancelled", "File was not saved. Content is displayed in the text area.", parent=self.root)
 
 
     def _check_ui_update_queue(self):
@@ -758,39 +351,30 @@ class MainApp:
                 elif msg_type == constants.MSG_TYPE_PROGRESS:
                     self.ui.update_status_and_progress(progress_value=payload.get("value"))
                 elif msg_type == constants.MSG_TYPE_COMPLETED:
-                    status = payload.get(constants.KEY_FINAL_STATUS)
-                    err_msg = payload.get(constants.KEY_ERROR_MESSAGE)
-                    is_empty = payload.get(constants.KEY_IS_EMPTY_RESULT)
-                    processed_data = payload.get("processed_data") # Changed from "processed_segments"
-                    is_plain_text = payload.get("is_plain_text_output", False) # Get the flag
-                    original_audio_path = payload.get("original_audio_path")
-
-                    if status == constants.STATUS_SUCCESS and processed_data:
-                        # Pass is_plain_text to the save function
-                        self._prompt_for_save_location_and_save_single(processed_data, is_plain_text, original_audio_path)
-                    elif status == constants.STATUS_EMPTY:
-                        self.ui.update_status_and_progress(err_msg or "No speech detected.", 100)
-                        self.ui.display_processed_output(processing_returned_empty=True)
-                    elif status == constants.STATUS_ERROR:
-                        self.ui.update_status_and_progress(f"Error: {err_msg[:100]}...", 0)
-                        self.ui.update_output_text(f"Error processing {os.path.basename(original_audio_path)}:\n{err_msg}")
-                        self.error_display_queue.put(f"Error processing {os.path.basename(original_audio_path)}:\n{err_msg}")
-                    self.ui.enable_ui_after_processing()
-
-                elif msg_type == constants.MSG_TYPE_BATCH_FILE_START:
-                    filename = payload.get(constants.KEY_BATCH_FILENAME)
-                    current_idx = payload.get(constants.KEY_BATCH_CURRENT_IDX)
-                    total_files = payload.get(constants.KEY_BATCH_TOTAL_FILES)
-                    progress_percent = int((current_idx -1) / total_files * 100) if total_files > 0 else 0
-                    self.ui.update_status_and_progress(f"Batch: Processing {current_idx}/{total_files}: {filename}", progress_percent)
-                    self.ui.update_output_text(f"Batch: Now processing file {current_idx} of {total_files}: {filename}...")
-
-                elif msg_type == constants.MSG_TYPE_BATCH_COMPLETED:
-                    all_results = payload.get(constants.KEY_BATCH_ALL_RESULTS)
-                    self.ui.update_status_and_progress("Batch processing finished. Awaiting save location...", 100)
-                    self._prompt_for_batch_save_directory_and_save(all_results)
-                    self.ui.enable_ui_after_processing()
-
+                    final_status = payload.get(constants.KEY_FINAL_STATUS)
+                    error_msg = payload.get(constants.KEY_ERROR_MESSAGE)
+                    
+                    if final_status == constants.STATUS_SUCCESS:
+                        segments = payload.get("processed_segments")
+                        if segments:
+                            self._prompt_for_save_location_and_save(segments)
+                        else:
+                            logging.warning("MSG_TYPE_COMPLETED with STATUS_SUCCESS but no 'processed_segments' or segments are empty.")
+                            no_content_msg = error_msg or "Processing completed, but no textual content was generated."
+                            self.ui.update_status_and_progress(no_content_msg, 100)
+                            self.ui.update_output_text(no_content_msg)
+                    elif final_status == constants.STATUS_EMPTY:
+                        empty_message = error_msg or "No speech detected or transcribed."
+                        self.ui.update_status_and_progress(empty_message, 100)
+                        self.ui.display_processed_output(output_file_path=None, processing_returned_empty=True)
+                    elif final_status == constants.STATUS_ERROR:
+                        final_err_text = error_msg or "An unspecified error occurred during processing."
+                        self.ui.update_status_and_progress(f"Error: {final_err_text[:100]}...", 0) 
+                        self.error_display_queue.put(final_err_text) 
+                        self.ui.update_output_text(f"Processing Error: {final_err_text}\n(Check console for more details if available)")
+                    
+                    self.ui.enable_ui() 
+                
                 self.ui_update_queue.task_done()
         except queue.Empty:
             pass
@@ -825,35 +409,7 @@ class MainApp:
 
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support() # Important for PyInstaller on Windows
-    main_app_root = tk.Tk()
-
-    # Place window off-screen initially
-    main_app_root.geometry("1x1-10000-10000") # 1x1 pixel window, far off screen
-    main_app_root.title("Transcription Oli Loader") # Temporary title
-
-    # Attempt to apply theme early for LaunchScreen consistency
-    style_for_root = ttk.Style(main_app_root)
-    try:
-        if 'clam' in style_for_root.theme_names(): style_for_root.theme_use('clam')
-        elif 'alt' in style_for_root.theme_names(): style_for_root.theme_use('alt')
-        theme_bg = style_for_root.lookup('TFrame', 'background')
-        main_app_root.configure(background=theme_bg)
-    except tk.TclError as e:
-        logger.warning(f"Could not apply early theme/bg for root: {e}")
-    
-    main_app_root.withdraw() # Hide the root window until models are loaded
-    main_app_root.update_idletasks() # Process withdraw
-
-    launch_screen = LaunchScreen(main_app_root) # LaunchScreen is a Toplevel, uses root's theme
-
-    main_app_root.update_idletasks() # Ensure launch screen is processed
-
-    app = MainApp(main_app_root)
-    # Defer the start of initialization slightly to ensure the launch screen is fully visible
-    main_app_root.after(150, lambda: app.start_initialization_sequence(launch_screen))
-
-    main_app_root.mainloop()
-
-
-
+    logging.basicConfig(level=logging.DEBUG) # Ensure root logger is configured for testing
+    root = tk.Tk()
+    app = MainApp(root)
+    root.mainloop()

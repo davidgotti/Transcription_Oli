@@ -1,10 +1,33 @@
 # utils/constants.py
+<<<<<<< HEAD
+=======
+import os
+import sys
+>>>>>>> ad2357cfa3db78e5a6649cfa66120c79cbc04232
 import logging
 import os
 
 # --- User-specific Application Data Directory ---
 APP_NAME = "TranscriptionOli"  
 APP_USER_DATA_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
+
+# --- User-specific Application Data Directory ---
+APP_NAME = "TranscriptionOli"
+
+def get_app_data_dir():
+    """Returns the appropriate user-specific data directory for the OS."""
+    if sys.platform == "win32":
+        # Windows
+        return os.path.join(os.environ['APPDATA'], APP_NAME)
+    elif sys.platform == "darwin":
+        # macOS
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
+    else:
+        # Linux and other Unix-like systems
+        return os.path.join(os.path.expanduser("~"), ".config", APP_NAME)
+
+APP_USER_DATA_DIR = get_app_data_dir()
+
 
 # --- Message types for the queue ---
 MSG_TYPE_STATUS = "STATUS_UPDATE"
