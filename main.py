@@ -35,7 +35,17 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import queue
 import logging
+<<<<<<< HEAD
 import os
+=======
+import multiprocessing
+
+# --- Add the bundled ffmpeg to the PATH ---
+if getattr(sys, 'frozen', False):
+    bundle_dir = sys._MEIPASS
+    ffmpeg_path = os.path.join(bundle_dir, 'bin')
+    os.environ["PATH"] += os.pathsep + ffmpeg_path
+>>>>>>> 060be60b96e8a62acdf36f774b1c833055ad04de
 
 # --- Project-specific imports ---
 from utils import constants
